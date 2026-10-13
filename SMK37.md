@@ -34,7 +34,7 @@ checked. The web installer (`web/index_pkg.html`, built by `web/make_site.py`) d
 Updating later works the same way; projects, presets, samples and settings are kept. A package never goes to the
 other device (FM-1 / SMK-37), and a keyboard running another firmware with its own updater is left alone.
 
-Until this project's releases include SMK-37 packages, unofficial builds are at <https://genkigenki.github.io/smk37/>.
+Until this project's releases include SMK-37 packages, unofficial builds can be installed with the web installer: <https://genkigenki.github.io/smk37/>.
 
 **Back to the stock firmware:** install the official package for your model with M-Vave's own updater (M-UPGRADE),
 or give it to the installer: `python3 tools/fm1_install.py --force SMK-37_Pro_016.fwsc` (the installer reads the
