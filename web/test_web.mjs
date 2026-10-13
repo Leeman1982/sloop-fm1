@@ -16,8 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
-import { blockCount, logicalImage, productOf, validateStockPackage } from "./fm1pkg.js";
-import { Updater, pack7, unpack7, FM1_PORT } from "./fm1ota.js";
+import { blockCount, logicalImage, productOf, validateStockPackage, identifyStockPackage, STOCK_SMK } from "./fm1pkg.js";
+import { Updater, pack7, unpack7, sameKeyboard, OUR_LOADER, OTHER_SMK, PORT_RE, stockFit } from "./fm1ota.js";
 
 let failed = 0;
 const ok = (cond, what) => { console.log(`${what.padEnd(64)} ${cond ? "ok" : "FAIL"}`); if (!cond) failed++; };
@@ -1389,9 +1389,12 @@ const UPGRADE = [0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7];
 
 /* an FM-1 on WebMIDI: identity, then "device asks, host answers" reads of the image */
 class FakeFM1 {
-  constructor(image, { unplugAfter = Infinity, finalIdentity = "FM-1_900", name = "FM-1", identity = "FM-1_015" } = {}) {
+  constructor(image, { unplugAfter = Infinity, finalIdentity = "FM-1_900", identity = "FM-1_015", name = "FM-1",
+                      loader = "ota-FM-1_900", outName = (n) => n, readAll = false, jump = false } = {}) {
+    this.jump = jump;   // the running firmware restarts into its loader on UPGRADE, without step 1
     this.image = image; this.unplugAfter = unplugAfter; this.served = 0; this.bad = 0;
-    this.finalIdentity = finalIdentity;
+    this.readAll = readAll; this.written = new Uint8Array(image.length); this.wrote = 0;   // readAll: the loader reads it all
+    this.finalIdentity = finalIdentity; this.loader = loader; this.outName = outName;
     this.access = { inputs: new Map(), outputs: new Map() };
     this.boot(identity, name);
   }
@@ -1400,7 +1403,7 @@ class FakeFM1 {
     for (const m of [this.access.inputs, this.access.outputs]) { for (const p of m.values()) p.state = "disconnected"; m.clear(); }
     const id = Math.random().toString(36).slice(2);
     this.input = { id: "i" + id, name, state: "connected", onmidimessage: null, open: async () => {} };
-    this.output = { id: "o" + id, name, state: "connected", open: async () => {}, send: (d) => {
+    this.output = { id: "o" + id, name: this.outName(name), state: "connected", open: async () => {}, send: (d) => {
       if (this.output.state !== "connected") throw new Error("InvalidStateError");
       setTimeout(() => this.rx(Array.from(d)), 1);
     } };
@@ -1414,8 +1417,10 @@ class FakeFM1 {
       const body = [0, 0x59, 0x11, 0, 0, 0, ...t, ...new Array(28 - t.length).fill(0)];
       this.tx([0xF0, ...pack7(body), 0xF7]);
     } else if (eq(d, UPGRADE)) {
+      if (this.jump && !this.identity.startsWith("ota-")) { this.input.state = this.output.state = "disconnected"; setTimeout(() => this.boot(this.loader, "Felucca Update"), 300); return; }
+      const n = this.readAll ? Math.ceil(this.image.length / 512) : 6;
       this.queue = this.identity.startsWith("ota-")
-        ? [...Array.from({ length: 6 }, (_, k) => [k * 512, 512]), [0xF0000000, 8]]
+        ? [...Array.from({ length: n }, (_, k) => [k * 512, Math.min(512, this.image.length - k * 512)]), [0xF0000000, 8]]
         : [[0, 64], [0x40, 160], [0x1000, 512], [0xE0000000, 8]];
       this.next();
     } else if (this.waiting) {
@@ -1424,10 +1429,11 @@ class FakeFM1 {
       const got = u.slice(14, 14 + (addr >= 0xE0000000 ? 8 : len));
       const want = addr >= 0xE0000000 ? [...new TextEncoder().encode("success"), 0] : Array.from(this.image.subarray(addr, addr + len));
       if (!eq(got, want)) this.bad++;
+      if (addr < 0xE0000000 && this.identity.startsWith("ota-")) { this.written.set(got, addr); this.wrote += got.length; }
       this.waiting = null;
       this.served++;
       if (this.served >= this.unplugAfter) { this.input.state = this.output.state = "disconnected"; return; }
-      if (addr === 0xE0000000) setTimeout(() => this.boot("ota-FM-1_900", "Felucca Update"), 300);
+      if (addr === 0xE0000000) setTimeout(() => this.boot(this.loader, "Felucca Update"), 300);
       else if (addr === 0xF0000000) setTimeout(() => this.boot(this.finalIdentity, "Felucca"), 300);
       else this.next();
     }
@@ -1473,20 +1479,7 @@ async function updater() {
   ok(e && e.code === "lost", "fm1ota.js: unplugged in step 1 -> error code 'lost'");
   const e2 = await new Updater({ inputs: new Map(), outputs: new Map() }).install(image, "FM-1_900").then(() => null, (x) => x);
   ok(e2 && e2.code === "notfound", "fm1ota.js: no device -> error code 'notfound'");
-  {   /* an FM-1 running CLIPPER (USB name "Clipper", SLOOP's sister firmware) installs SLOOP like any FM-1 */
-    const cl = new FakeFM1(image, { name: "Clipper", identity: "FM-1_901" });
-    const g = await new Updater(cl.access).install(image, "FM-1_900");
-    ok(g === "FM-1_900" && cl.bad === 0, "fm1ota.js: an FM-1 under CLIPPER (port 'Clipper') -> found and installed");
-    /* other gear is never probed, and "not found" names the MIDI ports there are */
-    const other = new FakeFM1(image, { name: "Arturia KeyStep Pro" });
-    const e6 = await new Updater(other.access).install(image, "FM-1_900").then(() => null, (x) => x);
-    ok(e6 && e6.code === "notfound" && other.served === 0 && /Arturia KeyStep Pro/.test(e6.detail),
-       `fm1ota.js: a port of other gear is left alone; 'not found' lists it${e6 ? e6.detail : ""}`);
-    ok(["FM-1", "Felucca", "Felucca Update", "Clipper", "SLOOP", "MIDIIN2 (Clipper)", "USB-MIDI"].every((n) => FM1_PORT.test(n)) &&
-       !["Arturia KeyStep Pro", "loopMIDI Port", "Microsoft GS Wavetable Synth"].some((n) => FM1_PORT.test(n)),
-       "fm1ota.js: FM1_PORT takes the FM-1's names (SLOOP, CLIPPER, the loader, the stock firmware), not other gear");
-  }
-  {   /* resume() checks the loader's model against the package, as install() checks the running firmware */
+  {   /* resume() checks the loader's model against the package, by install()'s rule */
     const smkOta = new FakeFM1(image);
     smkOta.boot("ota-SMK-37 Pro_900", "Felucca Update");
     const m1 = await new Updater(smkOta.access).resume(image, null, { package: "FM-1_900" }).then(() => null, (x) => x);
@@ -1495,6 +1488,14 @@ async function updater() {
     noPkg.boot("ota-FM-1_900", "Felucca Update");
     const m2 = await new Updater(noPkg.access).resume(image).then(() => null, (x) => x);
     ok(m2 && m2.code === "model" && noPkg.served === 0, "fm1ota.js: resume without the package's identity writes nothing");
+    const elite = new FakeFM1(image);
+    elite.boot("ota-SMK-37 Elite_900", "Felucca Update");
+    const m3 = await new Updater(elite.access).resume(image, null, { package: "SMK-37 Pro_900" }).then(() => null, (x) => x);
+    ok(m3 && m3.code === "model" && elite.served === 0, "fm1ota.js: resume: another SMK model only with anyModel, as install()");
+    const elite2 = new FakeFM1(image);
+    elite2.boot("ota-SMK-37 Elite_900", "Felucca Update");
+    const r6 = await new Updater(elite2.access).resume(image, null, { package: "SMK-37 Pro_900", anyModel: true });
+    ok(r6 === true && elite2.served > 0, "fm1ota.js: resume with anyModel: an SMK-37 Pro package on an Elite's loader is written");
   }
   const stock = new FakeFM1(image);
   stock.boot("ota-FM-1_015", "FM-1 Update");
@@ -1509,32 +1510,183 @@ async function updater() {
   wrong.boot("ota-FM-1_015", "FM-1 Update");
   const e5 = await new Updater(wrong.access).resume(image, null, { product: "FM-1_015" }).then(() => null, (x) => x);
   ok(e5 && e5.code === "mismatch", "fm1ota.js: return to official: another firmware coming back is not 'done'");
-  const pk = await import(join(HERE, "fm1pkg.js"));
+  /* the SMK-37 models: one keyboard under several names */
+  ok(sameKeyboard("SMK-37 Elite", "SMK-37 Pro") && sameKeyboard("ota-MKE-P37", "SMK-37 Elite") && sameKeyboard("STARRYKEY-37 PLAY", "SMK-37 Pro")
+    && sameKeyboard("SMK-37+VA", "MKE-P37") && !sameKeyboard("FM-1", "SMK-37 Pro") && !sameKeyboard("SMK-37 Elite", "FM-1"),
+    "fm1ota.js: SMK-37 Pro / Elite / MKE-P37 / Starrykey / +VA are one keyboard, the FM-1 another");
+  ok(OUR_LOADER({ text: "ota-SMK-37 Elite_900" }) && OUR_LOADER({ text: "ota-MKE-P37_700" }) && !OUR_LOADER({ text: "ota-SMK-37 Elite_016" }),
+    "fm1ota.js: our loader under the Elite / MKE-P37 name is ours, the stock ones are not");
+  const smk = { finalIdentity: "SMK-37 Pro_900", loader: "ota-SMK-37 Pro_900" };
+  const elite = new FakeFM1(image, { ...smk, identity: "SMK-37 Elite_016", name: "SMK-37 Elite" });
+  const e7 = await new Updater(elite.access).install(image, "SMK-37 Pro_900").then(() => null, (x) => x);
+  ok(e7 && e7.code === "model" && elite.served === 0, "fm1ota.js: an Elite and a Pro package: refused without anyModel");
+  const elite2 = new FakeFM1(image, { ...smk, identity: "SMK-37 Elite_016", name: "SMK-37 Elite" });
+  ok(await new Updater(elite2.access).install(image, "SMK-37 Pro_900", null, true) === "SMK-37 Pro_900" && elite2.bad === 0,
+    "fm1ota.js: ... installed with anyModel (the same keyboard)");
+  const fm1 = new FakeFM1(image);
+  const e8 = await new Updater(fm1.access).install(image, "SMK-37 Pro_900", null, true).then(() => null, (x) => x);
+  ok(e8 && e8.code === "model" && fm1.served === 0, "fm1ota.js: an SMK package never goes to an FM-1, anyModel or not");
+  {   /* ChanceTheMaker's SMK firmwares ("SMK-37_931"): their own updater, never sent ours */
+    ok(!OUR_LOADER({ text: "ota-SMK-37_931" }) && OTHER_SMK({ text: "ota-SMK-37_931" }) && OTHER_SMK({ text: "SMK-37_941" }) && !OTHER_SMK({ text: "SMK-37 Pro_900" }),
+      "fm1ota.js: the bare SMK-37_9NN firmwares and their updater are not ours");
+    const other = new FakeFM1(image, { identity: "SMK-37_931", name: "Felucca", loader: "ota-SMK-37_931", jump: true });
+    const r = await new Updater(other.access).install(image, "SMK-37 Pro_900", null, true).catch((x) => x);
+    ok(r && r.code === "other" && other.served === 0 && other.identity === "SMK-37_931", "fm1ota.js: install: such a firmware is not even sent UPGRADE ('other')");
+    const stuck = new FakeFM1(image, { finalIdentity: "SMK-37 Pro_900" });
+    stuck.boot("ota-SMK-37_931", "Felucca Update");
+    const r2 = await new Updater(stuck.access).resume(image, null, { package: "SMK-37 Pro_900", anyModel: true }).catch((x) => x);
+    ok(r2 && r2.code === "foreign" && stuck.served === 0, "fm1ota.js: resume: its updater is never written ('foreign')");
+    const jumper = new FakeFM1(image, { identity: "SMK-37 Pro_016", name: "SMK-37 Pro", loader: "ota-SMK-37 Pro_016", jump: true });
+    const e9 = await new Updater(jumper.access).install(image, "SMK-37 Pro_900").catch((x) => x);
+    ok(e9 && e9.code === "foreign" && jumper.served === 0, "fm1ota.js: a firmware that jumps to another loader: nothing written ('foreign')");
+    const ours = new FakeFM1(image, { identity: "SMK-37 Pro_700", name: "Makkuro37", loader: "ota-SMK-37 Pro_700", finalIdentity: "SMK-37 Pro_900", jump: true });
+    ok(await new Updater(ours.access).install(image, "SMK-37 Pro_900", null, true) === "SMK-37 Pro_900" && ours.bad === 0,
+      "fm1ota.js: a firmware that jumps to one of our loaders: written through it");
+  }
+  const odd = new FakeFM1(image, { identity: "SMK-37 Pro_900", name: "USB Audio Device" });
+  const log = [];
+  ok(await new Updater(odd.access, (t) => log.push(t)).find() === null && log.some((t) => t.includes("USB Audio Device")),
+    "fm1ota.js: a port of another name is not probed, its name is logged");
+  const dodd = await new Updater(odd.access, null, { all: true }).find();
+  ok(dodd && dodd.id.text === "SMK-37 Pro_900", "fm1ota.js: ... found when every port is searched");
+  if (dodd) dodd.link.close();
+  const win = new FakeFM1(image, { identity: "SMK-37 Pro_900", name: "MIDIIN2 (Felucca)", outName: (n) => n.replace("MIDIIN", "MIDIOUT") });
+  win.access.outputs.set("other", { id: "other", name: "Microsoft GS Wavetable Synth", state: "connected", open: async () => {}, send: () => {} });
+  const dwin = await new Updater(win.access).find();
+  ok(dwin && dwin.id.text === "SMK-37 Pro_900", "fm1ota.js: MIDIIN2 (X) pairs with MIDIOUT2 (X)");
+  if (dwin) dwin.link.close();
+  const pk = await import("./fm1pkg.js");
   const notStock = new Uint8Array(pk.STOCK_V15_SIZE);
   const e6 = await pk.validateStockPackage(notStock).then(() => null, (x) => x);
   ok(e6 && /official FM-1 V15/.test(e6.message), "fm1pkg.js: only the exact official V15 is accepted (SHA-256)");
 }
 
-await editorMock();
-await editorLibrarian();
-await editorLive();
-await editorTracks();
-await editorSetGate();
-await editorMixer();
-await editorTrackParam();
-await editorV5();
-await editorV7();
-await editorV8();
-await editorV9();
-await editorBackup();
-await editor25();
-await editorDsyn();
-await editorCart();
-editorTabs();
-editorIcons();
-samplesMatch();
-chopTests();
+/* ------------------------------ the return to the M-Vave firmware (official SMK-37 range packages) --- */
+/* the official packages are read from SMK_STOCK_DIR (outside the repo, never copied anywhere; M-Vave's file names,
+ * SMK-37_Pro_016.fwsc ...); skipped without them */
+async function stockReturn() {
+  const REF = process.env.SMK_STOCK_DIR || join(HERE, "no-stock-packages");
+  const FILES = { "SMK-37 Pro": "SMK-37_Pro_", "SMK-37 Elite": "SMK-37_Elite_", "MKE-P37": "MKE-P37_",
+                  "Starrykey 37 Play": "STARRYKEY-37_PLAY_" };
+  const BLOCKS36 = new Set(["SMK-37 Pro_016", "MKE-P37_016", "STARRYKEY-37 PLAY_016"]);   // the rest: 20 interleave blocks
+  const strip = (raw, n) => {       // the logical image, independently: drop the marker byte of the first n blocks
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(...raw.subarray(i * 48, i * 48 + 47));
+    return Uint8Array.from([...out, ...raw.subarray(n * 48)]);
+  };
+  const have = STOCK_SMK.filter((k) => existsSync(`${REF}/${FILES[k.name]}${k.version}.fwsc`));
+  /* the page and the stock fit rule need no files */
+  ok(stockFit("SMK-37 Pro", "SMK-37 Pro_016") === "same" && stockFit("ota-SMK-37 Elite", "SMK-37 Elite_015") === "same"
+    && stockFit("SMK-37 Elite", "SMK-37 Pro_016") === "other" && stockFit("SMK-37", "MKE-P37_016") === "unknown"
+    && stockFit("SMK-37+VA", "SMK-37 Pro_016") === "unknown" && stockFit("STARRYKEY-37 PLAY", "STARRYKEY-37 PLAY_016") === "same"
+    && stockFit("FM-1", "SMK-37 Pro_016") === "refuse" && stockFit("SMK-37 Pro", "FM-1_015") === "refuse",
+    "stock: fit rule (own model / other SMK model warns / unnamed warns / FM-1 refused)");
+  ok(sameKeyboard("SMK-37", "SMK-37 Pro") && !sameKeyboard("SMK-37", "FM-1"), "stock: 'SMK-37_9xx' (other firmwares) is the SMK keyboard");
+  if (have.length < STOCK_SMK.length) { console.log(`stock: ${STOCK_SMK.length - have.length} official packages absent in SMK_STOCK_DIR: those skipped`); }
+  if (!have.length) return;
+  const raws = {};
+  for (const k of have) {
+    const raw = new Uint8Array(readFileSync(`${REF}/${FILES[k.name]}${k.version}.fwsc`));
+    raws[k.product] = raw;
+    const st = await identifyStockPackage(raw).catch((e) => e);
+    const n = BLOCKS36.has(k.product) ? 36 : 20;
+    ok(st.product === k.product && st.model === k.product.split("_")[0] && st.known === true && blockCount(raw) === n && eq(st.image, strip(raw, n)),
+      `stock: ${k.product} accepted, known release, ${n} blocks, logical image`);
+  }
+  if (raws["STARRYKEY-37 PLAY_016"]) ok(productOf(raws["STARRYKEY-37 PLAY_016"]) === "STARRYKEY-37 PLAY_016",
+    "stock: the Starrykey V016's 21-character identity (21 identity blocks + 15 more)");
+  /* accepted by structure, not by hash: another identity written into the marker bytes (the image unchanged) */
+  const relabel = (raw, ident) => {
+    const out = Uint8Array.from(raw);
+    for (let i = 0; i < 20; i++) out[i * 48 + 47] = i < ident.length ? (ident.charCodeAt(i) + i + 1) & 0xFF : 0x7D;
+    return out;
+  };
+  const any = raws[have[0].product];
+  const next = await identifyStockPackage(relabel(any, "SMK-37 Pro_017")).catch((e) => e);
+  ok(next.product === "SMK-37 Pro_017" && next.version === "017" && next.name === "SMK-37 Pro" && next.known === false,
+    "stock: a valid package with an unknown hash (M-Vave's next release, V017): accepted, not 'known'");
+  const ours = await identifyStockPackage(relabel(any, "SMK-37 Pro_901")).catch((e) => e);
+  const ours2 = await identifyStockPackage(relabel(any, "MKE-P37_700")).catch((e) => e);
+  const ours3 = await identifyStockPackage(relabel(any, "SMK-37_904")).catch((e) => e);
+  ok(ours.code === "ours" && ours2.code === "ours" && ours3.code === "ours", "stock: our own packages (_9xx / _7xx, 'SMK-37_9xx'): refused here");
+  const fm1pkg = await identifyStockPackage(relabel(any, "FM-1_016")).catch((e) => e);
+  ok(fm1pkg.code === "fm1", "stock: an FM-1 package: refused ('fm1')");
+  const big = await identifyStockPackage(relabel(any, "SMK-37 Pro_150")).catch((e) => e);
+  const other = await identifyStockPackage(relabel(any, "KEYSTEP_016")).catch((e) => e);
+  ok(big.code === "unknown" && other.code === "unknown", "stock: a version past 099 or a model outside the SMK-37 range: refused");
+  const bent = Uint8Array.from(any); bent[bent.length >> 1] ^= 1;        // inside the app (flash.bin)
+  const e1 = await identifyStockPackage(bent).catch((e) => e);
+  ok(e1 && e1.code === "damaged", "stock: one byte of the firmware changed (CRC): refused ('damaged')");
+  const old = `${REF}/MKE-P37_013.fwsc`;
+  if (existsSync(old)) {
+    const e2 = await identifyStockPackage(new Uint8Array(readFileSync(old))).catch((e) => e);
+    ok(e2.product === "MKE-P37_013" && e2.known === false, "stock: an official package not in the list (MKE-P37 013): accepted, not 'known'");
+  }
+  const e3 = await identifyStockPackage(new Uint8Array(1000)).catch((e) => e);
+  ok(e3 && e3.code === "unknown", "stock: any other file: refused");
+
+  /* the install on a fake keyboard: our port runs, its update starts the loader, the loader writes the whole package */
+  const k = have.find((x) => x.product === "SMK-37 Pro_016") || have[0];
+  const pkg = await identifyStockPackage(raws[k.product]);
+  const want = strip(raws[k.product], BLOCKS36.has(k.product) ? 36 : 20);
+  const kb = new FakeFM1(want, { identity: "SMK-37 Pro_900", name: "Felucca", loader: "ota-SMK-37 Pro_900", finalIdentity: k.product, readAll: true });
+  const steps = [];
+  const got = await new Updater(kb.access).install(pkg.image, pkg.product, (s) => steps.push(s), true).catch((e) => e);
+  ok(got === k.product && kb.bad === 0 && kb.wrote === want.length && eq(kb.written, want) && steps.at(-1) === "done",
+    `stock: ${k.product} written from 'SMK-37 Pro_900': the whole logical image (${kb.wrote} B), identity checked`);
+  const chance = new FakeFM1(want, { identity: "SMK-37_931", name: "Felucca", loader: "ota-SMK-37_931", jump: true });
+  const e10 = await new Updater(chance.access).install(pkg.image, pkg.product, null, true).catch((e) => e);
+  ok(e10 && e10.code === "other" && chance.served === 0, "stock: a firmware with its own updater ('SMK-37_931'): nothing sent ('other')");
+  const kb2 = new FakeFM1(pkg.image, { identity: "SMK-37 Elite_901", name: "Felucca", loader: "ota-SMK-37 Elite_901", finalIdentity: "SMK-37 Elite_901" });
+  const e4 = await new Updater(kb2.access).install(pkg.image, pkg.product, null, true).catch((e) => e);
+  ok(e4 && e4.code === "mismatch" && e4.detail === "SMK-37 Elite_901", "stock: the keyboard not reporting the official identity afterwards: 'mismatch'");
+  const fm1 = new FakeFM1(pkg.image, { identity: "FM-1_900", name: "Felucca" });
+  const e5 = await new Updater(fm1.access).install(pkg.image, pkg.product, null, true).catch((e) => e);
+  ok(e5 && e5.code === "model" && fm1.served === 0, "stock: an SMK-37 package on an FM-1: refused, nothing read");
+  /* already in update mode: the official package resumed on any SMK loader (ours or M-Vave's), never on an FM-1's */
+  const ota = new FakeFM1(pkg.image, { finalIdentity: k.product });
+  ota.boot("ota-SMK-37 Pro_016", "SMK-37 Pro");
+  const st = [];
+  const r1 = await new Updater(ota.access).resume(pkg.image, (s) => st.push(s), { product: pkg.product, anyModel: true }).catch((e) => e);
+  ok(r1 === true && ota.bad === 0 && st.at(-1) === "done", "stock: keyboard already in update mode: the official package finishes it, identity checked");
+  const otaFm1 = new FakeFM1(pkg.image);
+  otaFm1.boot("ota-FM-1_900", "Felucca Update");
+  const e6 = await new Updater(otaFm1.access).resume(pkg.image, null, { product: pkg.product, anyModel: true }).catch((e) => e);
+  ok(e6 && e6.code === "model" && otaFm1.served === 0, "stock: an FM-1 in update mode is never given an SMK-37 package");
+}
+
+/* a package identity longer than 20 characters (the stock Starrykey 37 Play V016: 21 identity blocks, then 0x7D) */
+function longIdentity() {
+  const synth = (product, blocks) => {
+    const img = Uint8Array.from({ length: 0x3000 }, (_, i) => (i * 7) & 0xFF), out = [];
+    for (let i = 0; i < blocks; i++) {
+      out.push(...img.subarray(i * 0x2F, (i + 1) * 0x2F), i < product.length ? (product.charCodeAt(i) + i + 1) & 0xFF : 0x7D);
+    }
+    out.push(...img.subarray(blocks * 0x2F));
+    return Uint8Array.from(out);
+  };
+  const raw = synth("STARRYKEY-37 PLAY_016", 36);
+  ok(blockCount(raw) === 36 && productOf(raw) === "STARRYKEY-37 PLAY_016" && logicalImage(raw).length === raw.length - 36,
+    "fm1pkg.js: a 21-character identity in a 36-block package is read in full");
+  const raw20 = synth("STARRYKEY-37 PLAY_015", 20);
+  ok(blockCount(raw20) === 20 && productOf(raw20) === "STARRYKEY-37 PLAY_01", "fm1pkg.js: a 20-block package holds 20 characters");
+}
+
+/* SLOOP's names: an FM-1 under CLIPPER (port "Clipper") or a firmware named SLOOP is probed, other gear is not */
+async function portNames() {
+  const image = Uint8Array.from({ length: 0x2000 }, (_, i) => (i * 7) & 0xFF);
+  const cl = new FakeFM1(image, { name: "Clipper", identity: "FM-1_901" });
+  ok(await new Updater(cl.access).install(image, "FM-1_900") === "FM-1_900" && cl.bad === 0,
+    "fm1ota.js: an FM-1 under CLIPPER (port 'Clipper') -> found and installed");
+  ok(["FM-1", "Felucca", "Felucca Update", "Clipper", "SLOOP", "MIDIIN2 (Clipper)", "USB-MIDI"].every((n) => PORT_RE.test(n)) &&
+     !["Arturia KeyStep Pro", "loopMIDI Port", "Microsoft GS Wavetable Synth"].some((n) => PORT_RE.test(n)),
+     "fm1ota.js: PORT_RE takes the FM-1's names (SLOOP, CLIPPER, the loader, the stock firmware), not other gear");
+}
+
 await packages();
 await updater();
+await stockReturn();
+longIdentity();
+await portNames();
 console.log(failed ? `WEB TESTS FAILED (${failed})` : "web tests passed");
 process.exit(failed ? 1 : 0);
