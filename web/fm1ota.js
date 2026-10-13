@@ -223,13 +223,19 @@ export class Updater {
   // resume: the device is already in update mode (loader) -> true when the write finished. Only SLOOP's
   // own loader is resumed, except for the return to the official firmware (opts.product: the official
   // package, its identity checked once the FM-1 is back, after Felucca 1.0): that one is the official
-  // loader's own image, as M-UPGRADE would write it
+  // loader's own image, as M-UPGRADE would write it. opts.package: the identity of the package being
+  // written; the loader's model must match it (or opts.product's), as install() checks the running one
   async resume(image, onStep, opts = {}) {
     const ota = await this.find(IS_OTA);
     if (!ota) return false;
     if (!OUR_LOADER(ota.id) && !opts.product) {
       ota.link.close();
       throw fail("foreign", `the FM-1 is in the update mode of another firmware (${ota.id.text}): finish that update with its own updater`, ota.id.text);
+    }
+    const want = opts.product || opts.package || "";
+    if (ota.id.model.replace(/^ota-/i, "") !== want.split("_")[0]) {
+      ota.link.close();
+      throw fail("model", `the device is in the update mode of ${ota.id.text}, the package is for ${want || "an unknown model"}`, ota.id.text);
     }
     const step = onStep || (() => {});
     if (!(await this.write(ota, image, step)).finished) return false;
