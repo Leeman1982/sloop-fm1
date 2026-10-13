@@ -70,7 +70,7 @@ are shared: build the FM-1 again before `tests/run_tests.sh`. The default stays 
 The SMK-37 Elite and the MKE-P37 are the same keyboard under other model names, and M-Vave's updater only takes
 a unit's own model: `MODEL=elite` or `MODEL=mke` (with `BOARD=smk37`) builds under that name (identity
 `SMK-37 Elite_900` / `MKE-P37_900`, `build/sloop-smk37-elite.fwsc` / `-mke.fwsc`).
-The controls on the SMK-37 Pro: [SMK37.md](SMK37.md).
+The SMK-37 models, controls and install: [SMK37.md](SMK37.md).
 
 ## Samples
 
