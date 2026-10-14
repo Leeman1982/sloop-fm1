@@ -104,6 +104,13 @@ trs_fed() {
     sed -n '/^void fm1_timer5_irq/,/^}/p' firmware/src/main.c | grep -q 'smo_tick();' && echo fed
 }
 run "SMK-37 TRS MIDI OUT: fed from every USB MIDI out packet, drained by the TIMER5 tick" trs_fed
+# the pads' DRUM KIT records into the drum track whatever track is armed; SEQ PLAY / REC work in the HOME menu
+pads_rec_menu() {
+    sed -n '/^static void pad_drum(/,/^}/p' firmware/src/seq.c | grep -q 'rec_hit(TDRUM, lane, lvl, 0);' &&
+    sed -n '/^    if (ui.menu) {/,/^    }/p' firmware/src/ui_input.c | grep -q 'rec_toggle();' &&
+    sed -n '/^    if (ui.menu) {/,/^    }/p' firmware/src/ui_input.c | grep -q 'transport_req = song.playing ? 2 : 1;' && echo checked
+}
+run "SMK-37 pads: DRUM KIT hits recorded into the drum track; PLAY / REC work in the HOME menu" pads_rec_menu
 # no divide by 0 (the FM-1 runs with the div0 trap off, hal/fm1_irq.h: a real one would give a wrong value
 # silently): the UI fuzz, the sequencer, the projects and a minute of random live use, with UBSan
 UBSAN="${CC_UB:-cc} -O1 -w -fsanitize=integer-divide-by-zero -fno-sanitize-recover=integer-divide-by-zero -Ibuild/gen -Ifirmware/src -Ifirmware/hal"

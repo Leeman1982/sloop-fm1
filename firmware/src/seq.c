@@ -1688,7 +1688,8 @@ static const int8_t EXT_LANE[FM1_NKEY] = {0, 0, 2, 2, 4, [32] = 15, [33] = 5, [3
 static uint32_t ext_quiet[16];                    /* a lane hit from an outer key: no pad light until (ms) */
 /* the pads, DRUM KIT (smk_input.h, the default; KNOB BANK + FADER BANK: STEPS): the drum kit whatever track is selected,
  * a pad a sound as on the drum track, at the pad's velocity (KEY VELOCITY; OCT- / OCT+ held: ghost / hard); the keys
- * keep playing the selected track. Played live, as the outer keys' drums (recorded when the drum track is armed).
+ * keep playing the selected track. Played live, as the outer keys' drums; while recording (whatever track is armed)
+ * the hits go into the drum track too, as when the drum track is selected and played.
  * STEPS: a pad is a step of the page (lk_q KB_PADSTEP, ui_input.c: as the SEQ layer's step keys) */
 #define KB_PADSTEP (LY_COUNT + 1u)
 static uint16_t pad_drum_on;                      /* lanes a pad holds (their MIDI note-off at its release) */
@@ -1709,6 +1710,9 @@ static void pad_drum(uint32_t lane, uint32_t v)
         return;
     lvl = smk_vel_lvl(v);
     pad_drum_on |= (uint16_t)(1u << lane);
+    if (song.playing && song.rec && !((song.rec >> TRK_DRUM) & 1u))
+        rec_hit(TDRUM, lane, lvl, 0);             /* recording (another track armed): into the drum track too, as
+                                                   * drum_input records it when the drum track is the armed one */
     drum_input(lane, lvl, 0, 1);
     midi_out_event(0x09u | (0x90u | mc) << 8 | (uint32_t)LANE_NOTE[lane] << 16 | lvl_vel(lvl, 100) << 24);
 }

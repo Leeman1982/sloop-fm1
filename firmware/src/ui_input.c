@@ -1190,6 +1190,21 @@ static void ui_input(void)
     if (ui.menu) {                                      /* HOME / REC taps do nothing here */
         punch.hold = 0;
         thr_req = 0;
+#if BOARD_SMK37
+        /* SMK-37: SEQ PLAY and SEQ REC keep working while the menu is up (no menu row uses them): start / stop,
+         * record arm / off, as on the pages (REC's hold to clear a track: on the pages only) */
+        if ((pressed >> panel.btn[B_REC]) & 1u)
+            rec_toggle();
+        if ((pressed >> panel.btn[B_PLAY]) & 1u) {
+#if FELUCCA_ARRANGER
+            if (!song.playing && arrangement_enabled && !arr_valid(&arrangement, arrangement_ready()))
+                ui_message("EMPTY SECTION: REC");
+            else
+#endif
+            if (!ft_owns_press())
+                transport_req = song.playing ? 2 : 1;
+        }
+#endif
         if (!ui.home_t0)
             menu_input(pressed);
         return;
