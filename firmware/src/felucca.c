@@ -74,6 +74,9 @@
 #if FELUCCA_UART
 #include "midi_uart.c"
 #endif
+#if BOARD_SMK37
+#include "smk_vel.h"          /* SMK-37: menu KEY VELOCITY (DYNAMIC, curves, FIXED), read by seq.c */
+#endif
 #define FELUCCA_ARRANGER 1
 #include "arranger.c"
 #include "seq.c"

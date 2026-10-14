@@ -1415,14 +1415,14 @@ static uint32_t key_lvl(void)
     return (b & dyn_bit[0]) ? LV_GHOST : (b & dyn_bit[1]) ? LV_HARD : LV_NORM;
 }
 #if BOARD_SMK37
-/* SMK-37 Pro: velocity keys and pads. A key's velocity (a pad: its white key's, smk_input.h); on the drum
- * track it picks the level unless OCT- / OCT+ is held */
-static uint32_t key_vel(uint32_t k) { return fm1_in.key_vel[SMK_KEY_F3 + k]; }
+/* SMK-37 Pro: velocity keys and pads. A key's velocity (a pad: its white key's, smk_input.h), as menu KEY VELOCITY
+ * sets it (smk_vel.h); on the drum track it picks the level unless OCT- / OCT+ is held */
+static uint32_t key_vel(uint32_t k) { return vel_apply(vel_mode, fm1_in.key_vel[SMK_KEY_F3 + k]); }
 static uint32_t smk_vel_lvl(uint32_t v)            /* a velocity -> the drum level, unless OCT- / OCT+ is held */
 {
     if (fm1_in.buttons & (dyn_bit[0] | dyn_bit[1]))
         return key_lvl();
-    return v < 40u ? LV_GHOST : v < 80u ? LV_SOFT : v > 112u ? LV_HARD : LV_NORM;
+    return vel_drum_lvl(v);
 }
 static uint32_t key_lvl_of(uint32_t k) { return smk_vel_lvl(key_vel(k)); }
 #else
@@ -1690,7 +1690,7 @@ static void ext_keys_block(void)
 {
     int32_t e;
     while ((e = smk_extkey_take()) >= 0) {
-        uint32_t k = (uint32_t)e >> 8, v = (uint32_t)e & 0xFFu, sel = song.sel % NTRK, mc;
+        uint32_t k = (uint32_t)e >> 8, v = vel_apply(vel_mode, (uint32_t)e & 0xFFu), sel = song.sel % NTRK, mc;
         track_t *t = &trk[sel];
         if (k >= FM1_NKEY)
             continue;

@@ -93,6 +93,20 @@ update mode (UBOOT).
 | — | — | keys G#5–C6 (highest 5) | synth tracks: notes; drum track: G#5 cowbell, A5 open hat, B5 crash, C6 ride |
 | LEDs under 27 keys | what is on / playing | 16 RGB pads | pads = the 16 white keys (top row 1–8, bottom 9–16), velocity; LEDs in the screen's track colours (blue, green, yellow, orange): steps lit, playhead/hits bright, off = dark; SCALE layer: piano layout; SAVE layer: slots used green, free white |
 
+## Velocity
+
+HOME menu (PATCH held) > AUDIO > **KEY VELOCITY**, on K8, sets how the 37 keys and the pads play. It applies to the
+notes, their MIDI out and the drum levels; OCT− / OCT+ held still play ghost / hard drums. Kept with the settings.
+
+| KEY VELOCITY | the notes play |
+|---|---|
+| DYNAMIC (default) | as played (the unit's factory velocity curves) |
+| SOFT | louder for a light touch (32 → 56, 64 → 96) |
+| HARD | loud needs a hard hit (64 → 32, 100 → 78) |
+| FIXED 64 | always 64 (drums: soft) |
+| FIXED 100 | always 100, as the FM-1's keys (drums: normal) |
+| FIXED 127 | always 127 (drums: hard) |
+
 ## The pad sound picker
 
 Turning K4 (PRESETS) shows the sounds of the selected track's kind on the 16 pads and on the screen (8 × 2), in the

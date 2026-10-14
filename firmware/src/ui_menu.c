@@ -1,15 +1,22 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* SLOOP menu (HOME held), in sections as the pages are (2.4): SCREEN (COLOR, ZOOM), LIGHTS (LIGHTS, KEYS, NOTES),
- * AUDIO (LOWCUT, USB AUDIO, USB SERIAL), SYSTEM (HARDWARE CALIBRATION, LEARN CLEAR (2.6), ABOUT). SELECT goes to the section
- * before / after (stopping at the ends), KNOB 1..3 set the section's settings in order (the knob's colour marks
- * its row), PRESETS moves the cursor; OCT+ steps the cursor's setting round or opens it (CALIBRATION, ABOUT),
- * OCT- closes (from ABOUT: back to the section). */
+ * AUDIO (LOWCUT, USB AUDIO, USB SERIAL; SMK-37: KEY VELOCITY), SYSTEM (HARDWARE CALIBRATION, LEARN CLEAR (2.6), ABOUT).
+ * SELECT goes to the section before / after (stopping at the ends), KNOB 1..3 (a fourth row: 4) set the section's
+ * settings in order (the knob's colour marks its row), PRESETS moves the cursor; OCT+ steps the cursor's setting
+ * round or opens it (CALIBRATION, ABOUT), OCT- closes (from ABOUT: back to the section). */
 /* ------------------------------------------------------------ menu --- */
-enum { MI_COLOR, MI_ZOOM, MI_LIGHTS, MI_KEYS, MI_NOTES, MI_LOWCUT, MI_USB, MI_SERIAL, MI_PANEL, MI_LCLEAR, MI_ABOUT,
-       MI_COUNT };
+enum { MI_COLOR, MI_ZOOM, MI_LIGHTS, MI_KEYS, MI_NOTES, MI_LOWCUT, MI_USB, MI_SERIAL,
+#if BOARD_SMK37
+       MI_VEL,                                     /* SMK-37: AUDIO > KEY VELOCITY (K8), smk_vel.h */
+#endif
+       MI_PANEL, MI_LCLEAR, MI_ABOUT, MI_COUNT };
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "ZOOM", "LIGHTS", "KEYS", "NOTES", "SPEAKER LOWCUT", "USB AUDIO",
-                                              "USB SERIAL", "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT"};
+                                              "USB SERIAL",
+#if BOARD_SMK37
+                                              "KEY VELOCITY",
+#endif
+                                              "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT"};
 #define MI_SYS0 MI_PANEL
 enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_SYSTEM, MS_COUNT };
 static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "SYSTEM"};   /* (AUDIO: and USB) */
@@ -43,6 +50,9 @@ static const char *mi_value(uint32_t i, uint16_t *c)
     case MI_LOWCUT: return settings.lowcut ? "ON" : "OFF";
     case MI_USB: return usb_full ? "FULL" : "MASTER";
     case MI_SERIAL: return usb_serial ? "ON" : "OFF";
+#if BOARD_SMK37
+    case MI_VEL: return VEL_NAME[vel_mode % VEL_N];
+#endif
     case MI_LCLEAR: {                                 /* (2.6) the CCs MIDI LEARN holds; OCT+ clears them */
         static char b[8];
         uint32_t n = ml_count();
@@ -66,6 +76,9 @@ static void draw_menu(void)
     uint32_t sig = ui.menu * 7u + ui.menu_sel * 131u + settings.palette * 1009u + settings.lowcut * 7919u +
                    settings.zoom * 104729u + lights_lvl * 1299709u + lights_keys * 15485863u + ml_count() * 2654435u +
                    lights_notes * 32452843u + usb_full * 49979687u + usb_serial * 86028121u;
+#if BOARD_SMK37
+    sig += vel_mode * 179424673u;
+#endif
     if (!ui.force && sig == ui.menu_sig)
         return;
     ui.menu_sig = sig;
@@ -142,8 +155,13 @@ static void draw_menu(void)
                 if (i == MI_SERIAL && usb_serial != usb_cdc_now())
                     cv_text(xv + 8, y + 30, &FONT_S, "RESTART", C_AMB);   /* (usb.c: at the next start) */
             }
-            cv_text(4, MI_Y0 + 3 * MI_DY + 6, &FONT_S, "SELECT SECTION  KNOB SETS", C_DIM);
-            cv_text(4, MI_Y0 + 3 * MI_DY + 22, &FONT_S, "OCT+ OK   OCT- CLOSE", C_DIM);   /* (rows .. 218) */
+#if BOARD_SMK37
+            if (MS_FIRST[sec + 1u] - MS_FIRST[sec] <= 3u)   /* (a fourth row, K8: no room for the help) */
+#endif
+            {
+                cv_text(4, MI_Y0 + 3 * MI_DY + 6, &FONT_S, "SELECT SECTION  KNOB SETS", C_DIM);
+                cv_text(4, MI_Y0 + 3 * MI_DY + 22, &FONT_S, "OCT+ OK   OCT- CLOSE", C_DIM);   /* (rows .. 218) */
+            }
         }
         cv_oy = 0;
         cv_blit(0, H_HEAD + 1 + pass * 124u);
@@ -192,6 +210,16 @@ static void mi_set(uint32_t i, int32_t s)
     case MI_NOTES:
         lights_notes = (uint8_t)(s > 0 ? 1u : s < 0 ? 0u : !lights_notes);
         break;
+#if BOARD_SMK37
+    case MI_VEL:                                       /* DYNAMIC .. FIXED 127 (stops at the ends); OCT+ steps round */
+        if (s > 0 && vel_mode + 1u < VEL_N)
+            vel_mode++;
+        else if (s < 0 && vel_mode > 0u)
+            vel_mode--;
+        else if (!s)
+            vel_mode = (uint8_t)((vel_mode + 1u) % VEL_N);
+        break;
+#endif
     case MI_LIGHTS:
     case MI_KEYS: {                                    /* brighter / dimmer (stops at the ends); OCT+ steps round */
         uint8_t *v = i == MI_LIGHTS ? &lights_lvl : &lights_keys;

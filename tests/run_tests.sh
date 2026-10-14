@@ -77,6 +77,17 @@ $CC -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o "$OUT/k4led_test" tests/
 run "SMK-37 Pro: KNOB BANK lit on a PRESETS detent; which modes are a grid" "$OUT/k4led_test" "$OUT"
 $CC -O2 -w -Ifirmware/hal -o "$OUT/padgrid_test" tests/padgrid_test.c
 run "SMK-37 Pro pads: steps and tiles in reading order, notes low at the bottom" "$OUT/padgrid_test"
+$CC -w -Ifirmware/src -o "$OUT/smk_vel_test" tests/smk_vel_test.c
+run "SMK-37 menu KEY VELOCITY: each mode -> the note's velocity, the drum level, the settings bits" "$OUT/smk_vel_test"
+# every key / pad velocity the app reads goes through KEY VELOCITY (smk_vel.h vel_apply): the keys and pads (seq.c key_vel),
+# the outer keys (smk_extkey_take); console.c shows the raw ones
+vel_applied() {
+    [ "$(grep -c 'fm1_in.key_vel' firmware/src/seq.c)" = 1 ] && grep -q 'vel_apply(vel_mode, fm1_in.key_vel' firmware/src/seq.c &&
+    [ "$(grep -c 'smk_extkey_take' firmware/src/seq.c)" = 1 ] && grep -q 'vel_apply(vel_mode, (uint32_t)e & 0xFFu)' firmware/src/seq.c &&
+    ! grep -n -e 'fm1_in.key_vel' -e 'smk_extkey_take' firmware/src/*.c | grep -v -e '^firmware/src/seq.c' -e '^firmware/src/console.c' &&
+    echo applied
+}
+run "SMK-37 menu KEY VELOCITY: applied wherever the app reads a key or pad velocity" vel_applied
 $CC -o "$OUT/smk_wheel_test" tests/smk_wheel_test.c
 run "SMK-37 Pro pitch wheel: the bend is back to 0 at rest, however slowly the wheel was moved" "$OUT/smk_wheel_test"
 # no divide by 0 (the FM-1 runs with the div0 trap off, hal/fm1_irq.h: a real one would give a wrong value
