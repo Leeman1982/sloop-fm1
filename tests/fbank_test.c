@@ -4,6 +4,7 @@
 #define UI_PAGES_HARNESS_ONLY 1
 #include "ui_pages_test.c"
 static uint8_t smk_fbank, smk_fbank_new;           /* (ui_input.c, SMK build) */
+static char knob_digit(uint32_t role) { return role == EN_SELECT ? '2' : '5'; }   /* (panel.c, SMK build: KNOB LAYOUT FM-1) */
 #include "../firmware/src/ui_fbank.c"
 
 static void fb_shot(const char *name)

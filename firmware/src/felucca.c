@@ -80,7 +80,7 @@
 #endif
 #if BOARD_SMK37
 #include "smk_vel.h"          /* SMK-37: menu KEY VELOCITY (DYNAMIC, curves, FIXED), read by seq.c */
-#include "smk_wheel.h"        /* SMK-37: the wheels, their calibration, menu BEND RANGE (main.c smk_wheels) */
+#include "smk_wheel.h"        /* SMK-37: the wheels, their calibration, menu BEND UP / DOWN (main.c smk_wheels) */
 #endif
 #define FELUCCA_ARRANGER 1
 #include "arranger.c"

@@ -48,7 +48,7 @@ update mode (UBOOT).
 
 | FM-1 printed | SLOOP function | SMK-37 printed | on the SMK-37 |
 |---|---|---|---|
-| MASTER (pot, top left) | output volume | K1 | master volume (virtual pot, 24 steps a click) |
+| MASTER (pot, top left) | output volume | K1 | master volume (virtual pot, 24 steps a click; its curve: HOME menu > AUDIO > LIMITER) |
 | SELECT (big encoder) | tempo (TRACKS), page ◀▶, visualiser style, menu section | K2 | SELECT: tempo / pages |
 | ALGORITHM | select track 1–4 | K3 | track |
 | PRESETS | sound (synth) / kit (drums) | K4 | sound / kit, the pad picker shows them |
@@ -56,8 +56,9 @@ update mode (UBOOT).
 | KNOB 2 | dial 2 on screen (green) | K6 | dial 2 |
 | KNOB 3 | dial 3 on screen (yellow) | K7 | dial 3 |
 | KNOB 4 | dial 4 on screen (orange) | K8 | dial 4 |
+| — | — | KNOB LAYOUT = SMK | HOME menu > SCREEN > KNOB LAYOUT (K7): K1–K4 the dials 1–4, K5 master volume, K6 SELECT, K7 PRESETS, K8 ALGORITHM (track); FM-1 (default) as above |
 | — | — | FADER 1–4 | tracks 1–4 (4 = drums), by FADER BANK: A level, B filter (low-pass ◀ open ▶ high-pass), C reverb, D delay; a fader takes over once moved |
-| — (no wheels used by SLOOP) | — | PITCH wheel | pitch bend, selected synth track: ±BEND RANGE (HOME menu > MIDI, K6: 1, 2, 3, 4, 5, 7, 12 semitones; default 7) |
+| — (no wheels used by SLOOP) | — | PITCH wheel | pitch bend, selected synth track: HOME menu > MIDI > BEND UP (K6) / BEND DOWN (K7), OFF, 1, 2, 3, 4, 5, 7, 12 semitones each; default 7 / 7 |
 | — | — | MOD wheel | vibrato 10 Hz, up to ±1 semitone (up = more) |
 | — | — | PEDAL jack | — |
 
@@ -80,9 +81,10 @@ update mode (UBOOT).
 | OCT− | octave down | drums: ghost hits | OCTAVE− | OCT− |
 | OCT+ | octave up | drums: hard hits | OCTAVE+ | OCT+ |
 | — | — | — | KNOB BANK | pins the pad sound picker open / closes it (lit while pinned or while K4 turns) |
-| — | — | — | FADER BANK | the fader bank screen; pressed again, < > or K2: the next bank A→B→C→D (closes after 4 s; lit while up; closes the pad picker) |
-| — | — | — | < | page back (as SELECT, never tempo); SEQ held: step page back; visualiser: style |
-| — | — | — | > | page forward; SEQ held: step page forward; visualiser: style |
+| — | — | — | FADER BANK | the fader bank screen; pressed again, < > or SELECT: the next bank A→B→C→D (closes after 4 s; lit while up; closes the pad picker) |
+| — | — | — | KNOB BANK + FADER BANK | the pads on the PLAY screen: DRUM KIT (default) ↔ STEPS (as the stock PAD BANK combo) |
+| — | — | — | < | page back (as SELECT, never tempo); SEQ held or pads on STEPS: step page back; visualiser: style |
+| — | — | — | > | page forward; SEQ held or pads on STEPS: step page forward; visualiser: style |
 
 ## Keys and pads
 
@@ -91,11 +93,11 @@ update mode (UBOOT).
 | 27 keys F3–G5 | notes; in layers: tiles (steps, FX, mix…) | keys F3–G5 (middle 27) | same, with velocity |
 | — | — | keys C3–E3 (lowest 5) | synth tracks: notes; drum track: C3 kick, D3 snare, E3 hat (black keys = left white key) |
 | — | — | keys G#5–C6 (highest 5) | synth tracks: notes; drum track: G#5 cowbell, A5 open hat, B5 crash, C6 ride |
-| LEDs under 27 keys | what is on / playing | 16 RGB pads | pads = the 16 white keys (top row 1–8, bottom 9–16), velocity; LEDs in the screen's track colours (blue, green, yellow, orange): steps lit, playhead/hits bright, off = dark; SCALE layer: piano layout; SAVE layer: slots used green, free white |
+| LEDs under 27 keys | what is on / playing | 16 RGB pads | PLAY screen: DRUM KIT (default; a pad a drum sound whatever track is selected, velocity; orange, dim / bright while it sounds) or STEPS (KNOB BANK + FADER BANK; the selected track's 16 steps of the page, top row 1–8: empty dim white, set in the track's colour, playhead white; tap sets / clears; drums: the sound last played). Layers: SEQ / FX / GLO / SAVE tiles, SCALE piano, EDIT / ARP held the white keys |
 
 ## Velocity
 
-HOME menu (PATCH held) > AUDIO > **KEY VELOCITY**, on K8, sets how the 37 keys and the pads play. It applies to the
+HOME menu (PATCH held) > MIDI > **KEY VELOCITY**, on K8 (before: AUDIO), sets how the 37 keys and the pads play. It applies to the
 notes, their MIDI out and the drum levels; OCT− / OCT+ held still play ghost / hard drums. Kept with the settings.
 
 | KEY VELOCITY | the notes play |
@@ -107,14 +109,19 @@ notes, their MIDI out and the drum levels; OCT− / OCT+ held still play ghost /
 | FIXED 100 | always 100, as the FM-1's keys (drums: normal) |
 | FIXED 127 | always 127 (drums: hard) |
 
-## MIDI: TRS MIDI OUT, BEND RANGE
+## HOME menu: the SMK-37 settings
 
-HOME menu (PATCH held) > **MIDI** (the fourth section; SELECT / K2 walks the sections):
+HOME menu (PATCH held); SELECT walks the sections, the knobs set the rows (K5–K8, or K1–K4 with KNOB LAYOUT = SMK;
+the screen names them), OCT+ steps the row under the cursor:
 
-| Row | Knob | Setting |
-|---|---|---|
-| TRS MIDI OUT | K5 | ON (default) / OFF. The 3.5 mm jack sends what goes out over USB MIDI: the keys and pads (and the sequencer with GLO > SYSTEM > MIDI = SEQ), on each track's MIDI channel, with or without a computer. NOT SENDING: the UART did not answer; set it again to retry |
-| BEND RANGE | K6 | the pitch wheel on the internal sounds (the selected synth track): ±1, 2, 3, 4, 5, 7 or 12 semitones, default 7 (as before). MIDI IN's pitch bend has its own (GLO > MIDI 2 > BEND) |
+| Section | Row | Knob | Setting |
+|---|---|---|---|
+| SCREEN | KNOB LAYOUT | K7 | FM-1 (default): K1 MASTER, K2 SELECT, K3 ALGORITHM, K4 PRESETS, K5–K8 the dials. SMK: K1–K4 the dials, K5 MASTER, K6 SELECT, K7 PRESETS, K8 ALGORITHM. The knobs are endless: the new layout works at once. Switched to SMK, the menu's rows move to K1–K4 (K3 switches back) |
+| AUDIO | LIMITER | K8 | SOFT (default): 9 dB more headroom at the power-on MASTER position, the limiter only near full scale, so a held chord keeps its level; MASTER's top as loud as before (turn it up for loudness). CLASSIC: SLOOP's limiter and MASTER curve |
+| MIDI | TRS MIDI OUT | K5 | ON (default) / OFF. The 3.5 mm jack sends what goes out over USB MIDI: the keys and pads (and the sequencer with GLO > SYSTEM > MIDI = SEQ), on each track's MIDI channel, with or without a computer. NOT SENDING: the UART did not answer; set it again to retry |
+| MIDI | BEND UP | K6 | the pitch wheel up, on the internal sounds (the selected synth track): OFF, 1, 2, 3, 4, 5, 7 or 12 semitones, default 7. MIDI IN's pitch bend has its own (GLO > MIDI 2 > BEND) |
+| MIDI | BEND DOWN | K7 | the same, down (default 7; e.g. +2 up, −12 down). The earlier BEND RANGE is read as both |
+| MIDI | KEY VELOCITY | K8 | see [Velocity](#velocity) |
 
 The jack is a MIDI **OUT** (UART1 on PC7, 31250 baud; there is no MIDI IN on the SMK-37). Connect it with a
 TRS-to-DIN MIDI adapter. The SMK-37 is listed with a **type A** TRS jack (a community spec sheet; M-Vave's manual
@@ -124,7 +131,8 @@ adapter.
 ## Hardware calibration
 
 OCTAVE− + OCTAVE+ held at power-on (or HOME menu > SYSTEM > HARDWARE CALIBRATION): press each button and turn each
-knob as the screen names it (K2 SELECT, K3 ALGORITHM, K4 PRESETS, K5–K8), then the wheels, OCTAVE+ taking each step:
+knob as the screen names it (K2 SELECT, K3 ALGORITHM, K4 PRESETS, K5–K8; with KNOB LAYOUT = SMK: K2–K4, K5 MASTER,
+K6 SELECT, K7 PRESETS, K8 ALGORITHM: the same knobs, per printed knob), then the wheels, OCTAVE+ taking each step:
 
 1. PITCH WHEEL, LET IT REST (its noise sets the dead band)
 2. PITCH WHEEL, FULL DOWN (hold it there)
@@ -132,14 +140,14 @@ knob as the screen names it (K2 SELECT, K3 ALGORITHM, K4 PRESETS, K5–K8), then
 4. MOD WHEEL, AT THE BOTTOM
 5. MOD WHEEL, FULL UP
 
-The screen shows the wheel's reading. The full travel then gives the full range (BEND RANGE, mod 0–127); at
+The screen shows the wheel's reading. The full travel then gives the full range (BEND UP / DOWN, mod 0–127); at
 power-on a pitch wheel resting near its taught rest is re-centred. 30 s without OCTAVE+ (or too little travel)
 keeps the wheels as they were. Kept in flash with the settings (0xB1000 / 0xB2000); without it, or after updating,
 the wheels calibrate themselves as before.
 
 ## The pad sound picker
 
-Turning K4 (PRESETS) shows the sounds of the selected track's kind on the 16 pads and on the screen (8 × 2), in the
+Turning PRESETS (K4; K7 with KNOB LAYOUT = SMK) shows the sounds of the selected track's kind on the 16 pads and on the screen (8 × 2), in the
 PRESETS order, 16 a page, then the user presets; on the drum track the drum kits. A pad loads its sound and plays a
 short preview; < > step the pages. It closes by itself a moment after the last turn, unless KNOB BANK pinned it.
 FADER BANK closes it (one screen at a time).
@@ -151,6 +159,7 @@ FADER BANK closes it (one screen at a time).
 | OCTAVE− held at power-on | USB rescue |
 | OCTAVE− + OCTAVE+ held at power-on | hardware calibration (re-teach buttons, knobs and the wheels) |
 | OCTAVE− + OCTAVE+ held 5 s, stopped | update mode (UBOOT) |
+| KNOB BANK + FADER BANK (SMK-37) | the pads: DRUM KIT ↔ STEPS |
 
 ## Safety
 

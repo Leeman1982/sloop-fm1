@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * SMK-37 Pro: Copyright (C) 2026 M. Geisler (genkigenki/makkuro) */
 /* The FADER BANK screen: the four banks, the active one lit, what faders 1..4 set (track colours).
- * FADER BANK opens it and then steps the bank, as < > and K2 SELECT do; PATCH closes it, or it closes by itself. */
+ * FADER BANK opens it and then steps the bank, as < > and SELECT (K2, or K6) do; PATCH closes it, or it closes by itself. */
 static const char *const FB_NAME[4] = {"LEVEL", "FILTER", "REVERB", "DELAY"};
 #define FB_SHOW_MS 4000u                           /* up this long after the last change */
 static uint8_t fb_open;
@@ -97,7 +97,8 @@ static void fb_draw(void)
                 cv_rect(32, y + 17, w < 1 ? 1 : w, 3, TE_COL[i]);
             }
             {
-                const char *h = "< >  K2  FADER BANK";
+                char h[24] = "< >  K2  FADER BANK";
+                h[6] = knob_digit(EN_SELECT);          /* (SELECT: K2, or K6, HOME menu > SCREEN > KNOB LAYOUT) */
                 cv_text((240 - text_w(&FONT_S, h)) / 2, 100, &FONT_S, h, TE_G3);
             }
         }

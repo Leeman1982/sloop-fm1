@@ -76,7 +76,7 @@ run "SMK-37 Pro FADER BANK screen: banks wrap, what each fader sets, closes by i
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o "$OUT/k4led_test" tests/k4led_test.c -lm
 run "SMK-37 Pro: KNOB BANK lit on a PRESETS detent; which modes are a grid" "$OUT/k4led_test" "$OUT"
 $CC -O2 -w -Ifirmware/hal -o "$OUT/padgrid_test" tests/padgrid_test.c
-run "SMK-37 Pro pads: steps and tiles in reading order, notes low at the bottom" "$OUT/padgrid_test"
+run "SMK-37 Pro pads: steps and tiles in reading order, notes low at the bottom, DRUM KIT / STEPS" "$OUT/padgrid_test"
 $CC -w -Ifirmware/src -o "$OUT/smk_vel_test" tests/smk_vel_test.c
 run "SMK-37 menu KEY VELOCITY: each mode -> the note's velocity, the drum level, the settings bits" "$OUT/smk_vel_test"
 # every key / pad velocity the app reads goes through KEY VELOCITY (smk_vel.h vel_apply): the keys and pads (seq.c key_vel),
@@ -89,7 +89,11 @@ vel_applied() {
 }
 run "SMK-37 menu KEY VELOCITY: applied wherever the app reads a key or pad velocity" vel_applied
 $CC -o "$OUT/smk_wheel_test" tests/smk_wheel_test.c
-run "SMK-37 wheels: BEND RANGE, the calibration (full travel = full range, re-centre), back to 0 at rest" "$OUT/smk_wheel_test"
+run "SMK-37 wheels: BEND UP / DOWN, the calibration (full travel = full range, re-centre), back to 0 at rest" "$OUT/smk_wheel_test"
+$CC -O2 -w -DSMK_MIX=1 -Ibuild/gen -Ifirmware/src -o "$OUT/smk_mix_test" tests/smk_mix_test.c -lm
+run "SMK-37 LIMITER: SOFT leaves held chords alone at power-on, catches peaks, no clipping; CLASSIC as before" "$OUT/smk_mix_test"
+$CC -o "$OUT/smk_knobs_test" tests/smk_knobs_test.c
+run "SMK-37 KNOB LAYOUT: FM-1 / SMK, each knob one role, calibration per printed knob, labels" "$OUT/smk_knobs_test"
 $CC -o "$OUT/smk_midi_out_test" tests/smk_midi_out_test.c
 run "SMK-37 TRS MIDI OUT: the bytes, the ring, one byte at a time, OFF, no UART: no hang" "$OUT/smk_midi_out_test"
 # every USB MIDI out packet goes to the TRS jack too (usb.c midi_out_event, before the USB check), and the TIMER5 tick

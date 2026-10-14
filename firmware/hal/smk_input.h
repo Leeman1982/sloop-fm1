@@ -105,6 +105,13 @@ static uint8_t smk_pad_note[SMK_NPAD];   /* the note key a pad pressed (+1; 0 = 
 static volatile uint16_t smk_pad_pick;   /* pads that go to the UI (picker, TRACKS track pads): a hit sets its bit here, no note */
 static volatile uint16_t smk_pick_hits;  /* bit per hardware pad */
 static volatile uint8_t smk_pad_grid;    /* the pads are a 1..16 grid (steps, tiles): white key w = pad w */
+/* the pads' two states on the PLAY layer (the UI sets them; KNOB BANK + FADER BANK toggles): DRUM KIT (the default) a
+ * pad plays its drum sound whatever track is selected (white key w = lane w, as on the drum track), STEPS a pad is a
+ * step of the selected track's page (reading order). Both go through the outer-key queue, not the note keys:
+ * SMK_EXT_PAD + lane, SMK_EXT_STEP + step. Elsewhere (layers, the DRUMS grid page) the pads are as before */
+static volatile uint8_t smk_pad_drums, smk_pad_steps;
+#define SMK_EXT_PAD 0x40u
+#define SMK_EXT_STEP 0x50u
 #define SMK_WHITE_OF_PAD(p) ((p) < 8u ? (p) + 8u : (p) - 8u)
 #define SMK_PAD_OF_KEY(w) (smk_pad_grid ? (w) : SMK_PAD_OF_WHITE(w))   /* white key -> pad, as the pads are now */
 
@@ -447,12 +454,23 @@ static void smk__padq(uint32_t pad, uint32_t vel)     /* a pad hit (vel) or rele
             smk_pick_hits |= (uint16_t)(1u << pad);
             return;
         }
+        if ((smk_pad_drums || smk_pad_steps) && !smk_pad_piano && !smk_pad_grid) {   /* DRUM KIT / STEPS: no note key */
+            n = smk_pad_steps ? SMK_EXT_STEP + pad : SMK_EXT_PAD + SMK_WHITE_OF_PAD(pad);
+            smk_pad_note[pad] = (uint8_t)n;
+            smk__extq(n, vel);
+            return;
+        }
         if (n0 < 0)
             return;                                   /* (a gap of the piano layout) */
         smk_pad_note[pad] = (uint8_t)(n0 + 1);
     } else {
         if (!smk_pad_note[pad])
             return;
+        if (smk_pad_note[pad] & SMK_EXT_PAD) {         /* (DRUM KIT / STEPS: its release goes there too, whatever now) */
+            smk__extq(smk_pad_note[pad], 0);
+            smk_pad_note[pad] = 0;
+            return;
+        }
         n0 = smk_pad_note[pad] - 1;                    /* the key it pressed, whatever the layout is now */
         smk_pad_note[pad] = 0;
     }
@@ -665,11 +683,13 @@ static void fm1_led_key(uint32_t id, int on)
         fm1_led[id] = (uint8_t)(on != 0);
 }
 
-/* fm1_adc.h stand-ins for main.c: the battery comes from mux C; the FM-1's MASTER pot is knob K8 here, as a
+/* fm1_adc.h stand-ins for main.c: the battery comes from mux C; the FM-1's MASTER pot is a knob here, as a
  * virtual pot (0..1023, 24 a detent; starts at 724: SLOOP's master_q12 2048, as before) */
 enum { FM1_ADC_BATT = 3, FM1_ADC_MASTER = 4 };
 #define SMK_ENC_MASTER 0u          /* K1, where the FM-1 has its MASTER pot (top left) */
 static int32_t smk_master = 724;
+static uint8_t smk_master_enc = SMK_ENC_MASTER;   /* the knob that turns it (panel.c knob_layout_apply: K1, or K5) */
+static int8_t smk_master_dir = 1;
 static void fm1_adc_init(void) {}
 static int32_t fm1_enc_take(uint32_t e);
 static int32_t fm1_adc_read(uint32_t ch)
@@ -677,7 +697,7 @@ static int32_t fm1_adc_read(uint32_t ch)
     if (ch == FM1_ADC_BATT)
         return fm1_in.batt ? (int32_t)fm1_in.batt : -1;
     if (ch == FM1_ADC_MASTER) {
-        smk_master += fm1_enc_take(SMK_ENC_MASTER) * 24;
+        smk_master += fm1_enc_take(smk_master_enc % FM1_NENC) * smk_master_dir * 24;
         smk_master = smk_master < 0 ? 0 : smk_master > 1023 ? 1023 : smk_master;
         return smk_master;
     }

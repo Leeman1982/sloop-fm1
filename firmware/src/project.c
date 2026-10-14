@@ -813,7 +813,8 @@ static int project_used(uint32_t slot) { return proj_ok(&proj_slot[slot & 3u]); 
  * map (seq.c ml_tab, ML_N entries), only while something is learned; 2.5 reads an object with the map as one without
  * its SYN kits (their defaults), one without it as its own */
 /* the settings object's third part (2.6): the MIDI LEARN map (seq.c ml_tab, ML_N entries, 2 bytes each, low first),
- * then GLO > MIDI: CH1 CH2 CH3, the drum channel | OTHER << 7, GLO > MIDI 2's BEND, 3 spare. Written only while it is not
+ * then GLO > MIDI: CH1 CH2 CH3, the drum channel | OTHER << 7, GLO > MIDI 2's BEND, 3 spare (SMK-37: BEND UP, BEND DOWN,
+ * LIMITER | KNOB LAYOUT << 1). Written only while it is not
  * the default (nothing learned, channels 1 2 3 10, OTHER SEL, BEND 2): else the object is exactly 2.5's. 2.6 test
  * builds wrote 32 (the map) or 36 bytes (and the channels) */
 #define MIDI_PART (2u * ML_N + 8u)
@@ -831,7 +832,10 @@ static void midi_part_fill(uint8_t *b)
     b[2u * ML_N + 4u] = midi_set[5];
     b[2u * ML_N + 5u] = b[2u * ML_N + 6u] = b[2u * ML_N + 7u] = 0;
 #if BOARD_SMK37
-    b[2u * ML_N + 5u] = (uint8_t)bend_byte(bend_st);   /* SMK-37: HOME menu > MIDI > BEND RANGE (0: the default, 7) */
+    b[2u * ML_N + 5u] = (uint8_t)bend_up_byte(bend_up);           /* SMK-37: HOME menu > MIDI > BEND UP (0: 7, as 2.6.4's BEND RANGE) */
+    b[2u * ML_N + 6u] = (uint8_t)bend_dn_byte(bend_dn, bend_up);  /* BEND DOWN (0: as UP) */
+    b[2u * ML_N + 7u] = (uint8_t)(lim_classic & 1u) | (uint8_t)((knob_layout & 1u) << 1);   /* AUDIO > LIMITER (1 CLASSIC),
+                                                                  * SCREEN > KNOB LAYOUT (1 SMK); 0: SOFT, FM-1 */
 #endif
 }
 static int midi_part_default(const uint8_t *b)
@@ -844,7 +848,7 @@ static int midi_part_default(const uint8_t *b)
     return b[2u * ML_N] == def[0] && b[2u * ML_N + 1u] == def[1] && b[2u * ML_N + 2u] == def[2] &&
            b[2u * ML_N + 3u] == (uint8_t)(def[3] | def[4] << 7) && b[2u * ML_N + 4u] == def[5]
 #if BOARD_SMK37
-           && !b[2u * ML_N + 5u]
+           && !b[2u * ML_N + 5u] && !b[2u * ML_N + 6u] && !b[2u * ML_N + 7u]
 #endif
         ;
 }
@@ -870,7 +874,11 @@ static void midi_part_read(const uint8_t *b, uint32_t n)
         midi_set[5] = (uint8_t)(b[2u * ML_N + 4u] >= 1u && b[2u * ML_N + 4u] <= 12u ? b[2u * ML_N + 4u] : 2u);
         song.g[G_BEND] = midi_set[5];
 #if BOARD_SMK37
-        bend_st = (uint8_t)bend_of_byte(b[2u * ML_N + 5u]);   /* (older data: 0, the default) */
+        bend_up = (uint8_t)bend_up_of_byte(b[2u * ML_N + 5u]);            /* (older data: 0, the default) */
+        bend_dn = (uint8_t)bend_dn_of_byte(b[2u * ML_N + 6u], bend_up);   /* (2.6.4: 0, its BEND RANGE both ways) */
+        lim_classic = (uint8_t)(b[2u * ML_N + 7u] & 1u);                  /* (older data: SOFT, FM-1) */
+        knob_layout = (uint8_t)((b[2u * ML_N + 7u] >> 1) & 1u);
+        knob_layout_apply();
 #endif
     }
     fm1_irq_on();

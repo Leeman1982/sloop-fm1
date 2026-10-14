@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* SMK-37 wheels (firmware/src/smk_wheel.h): HOME menu > MIDI > BEND RANGE (the range math, its steps, the settings
- * byte), the wheels taught by HARDWARE CALIBRATION (the full travel gives the full range, the re-centre at power-on,
+/* SMK-37 wheels (firmware/src/smk_wheel.h): HOME menu > MIDI > BEND UP / BEND DOWN (the range math each way, the
+ * steps, the settings bytes, 2.6.4's BEND RANGE byte), the wheels taught by HARDWARE CALIBRATION (the full travel gives the full range, the re-centre at power-on,
  * the mod wheel, older data), then the drift test (+-7 semitones, not taught): the bend is back to 0 once the
  * wheel rests again, however it was moved. v0.1 moved the centre by one count every 200 calls; the main loop calls it some 10 000 to
  * 50 000 times a second, so a slow touch dragged the centre along, the spring brought the wheel back outside
@@ -58,7 +58,7 @@ static void move(int32_t a, int32_t b, uint32_t ms)
         if (t % 2u == 0u)
             f += (raw - f) / 4;
         for (c = 0; c < CALLS_PER_MS; c++) {
-            nb = smk_pw_bend(&nw, &nocal, f, now, SMK_PW_ST);
+            nb = smk_pw_bend(&nw, &nocal, f, now, SMK_PW_ST, SMK_PW_ST);
             ob = old_bend(&ow, f);
         }
     }
@@ -73,8 +73,9 @@ static void reset(void)
     move(REST, REST, 500);                      /* calibrated at rest */
 }
 
-/* ---- BEND RANGE, the calibration ---- */
-static int32_t pb(smk_pw_t *w, const smk_wcal_t *c, int32_t p, uint32_t st) { return smk_pw_bend(w, c, p, 1000, st); }
+/* ---- BEND UP / DOWN, the calibration ---- */
+static int32_t pb(smk_pw_t *w, const smk_wcal_t *c, int32_t p, uint32_t st) { return smk_pw_bend(w, c, p, 1000, st, st); }
+static int32_t pb2(smk_pw_t *w, const smk_wcal_t *c, int32_t p, uint32_t up, uint32_t dn) { return smk_pw_bend(w, c, p, 1000, up, dn); }
 static void new_features(void)
 {
     smk_wcal_t c = {0}, keep;
@@ -83,15 +84,37 @@ static void new_features(void)
     uint32_t i, ok;
     char b[96];
 
-    /* BEND RANGE: the steps, the settings byte */
-    check(BEND_ST[0] == 1 && BEND_ST[BEND_N - 1u] == 12 && bend_st == 7u && BEND_DEF == 7u, "BEND RANGE: 1 2 3 4 5 7 12, default 7 (as before)");
+    /* BEND UP / DOWN: the steps, the settings bytes */
+    check(BEND_ST[0] == 0 && BEND_ST[1] == 1 && BEND_ST[BEND_N - 1u] == 12 && bend_up == 7u && bend_dn == 7u && BEND_DEF == 7u,
+          "BEND UP / DOWN: 0 1 2 3 4 5 7 12, default 7 / 7 (as before)");
     check(bend_step(2, 1) == 3 && bend_step(5, 1) == 7 && bend_step(7, 1) == 12 && bend_step(12, 1) == 12 &&
-          bend_step(1, -1) == 1 && bend_step(7, -1) == 5, "BEND RANGE: a knob turn steps, stops at the ends");
-    check(bend_step(12, 0) == 1 && bend_step(2, 0) == 3 && bend_step(9, 1) == BEND_DEF, "BEND RANGE: OCT+ steps round; a bad value: 7");
-    for (ok = 1, i = 0; i < BEND_N; i++)
-        ok &= bend_of_byte(bend_byte(BEND_ST[i])) == BEND_ST[i];
-    check(ok && bend_byte(7) == 0u && bend_byte(2) == 2u, "BEND RANGE: each value round trips in its settings byte (7: 0)");
-    check(bend_of_byte(0) == 7u && bend_of_byte(6) == 7u && bend_of_byte(255) == 7u, "BEND RANGE: older data (0) or garbage: 7");
+          bend_step(1, -1) == 0 && bend_step(0, -1) == 0 && bend_step(7, -1) == 5, "BEND UP / DOWN: a knob turn steps, stops at the ends");
+    check(bend_step(12, 0) == 0 && bend_step(0, 0) == 1 && bend_step(9, 1) == BEND_DEF, "BEND UP / DOWN: OCT+ steps round; a bad value: 7");
+    for (ok = 1, i = 0; i < BEND_N; i++) {
+        uint32_t j;
+        ok &= bend_up_of_byte(bend_up_byte(BEND_ST[i])) == BEND_ST[i];
+        for (j = 0; j < BEND_N; j++)
+            ok &= bend_dn_of_byte(bend_dn_byte(BEND_ST[j], BEND_ST[i]), bend_up_of_byte(bend_up_byte(BEND_ST[i]))) == BEND_ST[j];
+    }
+    check(ok, "BEND UP / DOWN: every pair round trips in its two settings bytes");
+    check(bend_up_byte(7) == 0u && bend_dn_byte(7, 7) == 0u && bend_dn_byte(12, 2) == 12u && bend_dn_byte(2, 2) == 0u &&
+          bend_up_byte(0) == BEND_NONE && bend_dn_byte(0, 7) == BEND_NONE, "BEND UP / DOWN: 7 / 7 (the default): two 0 bytes; OFF its own");
+    check(bend_up_of_byte(0) == 7u && bend_dn_of_byte(0, 7) == 7u && bend_up_of_byte(6) == 7u && bend_up_of_byte(255) == 7u,
+          "BEND UP / DOWN: older data (0, 0) or garbage: 7 / 7");
+    for (ok = 1, i = 1; i < BEND_N; i++) {                   /* 2.6.4 wrote BEND RANGE in UP's byte, 0 in DOWN's */
+        uint32_t b264 = BEND_ST[i] == 7u ? 0u : BEND_ST[i], up = bend_up_of_byte(b264);
+        ok &= up == BEND_ST[i] && bend_dn_of_byte(0, up) == BEND_ST[i];
+    }
+    check(ok, "BEND UP / DOWN: 2.6.4's BEND RANGE (1..12) comes back as both");
+    memset(&c, 0, sizeof c);
+    smk_wcal_pitch(&c, 533, 537, 448, 636);
+    memset(&w, 0, sizeof w);
+    check(pb2(&w, &c, 633, 2, 12) == 2 * 4096 && pb2(&w, &c, 451, 2, 12) == -12 * 4096,
+          "BEND UP 2 / DOWN 12: full up +2, full down -12 semitones");
+    memset(&w, 0, sizeof w);
+    check(pb2(&w, &c, 633, 0, 7) == 0 && pb2(&w, &c, 451, 0, 7) == -7 * 4096 && pb2(&w, &c, 451, 7, 0) == 0,
+          "BEND UP / DOWN OFF: that way does not bend, the other does");
+    memset(&c, 0, sizeof c);
 
     /* the calibration: rest 533..537, full down 448, full up 636 */
     check(smk_wcal_pitch(&c, 533, 537, 448, 636) && c.pc == 535 && c.plo == 451 && c.phi == 633 && c.pdead == 14,
@@ -104,7 +127,7 @@ static void new_features(void)
     check(!smk_wcal_mod(&c, 600, 602, 590) && !memcmp(&c, &keep, sizeof c), "calibration: mod, too little travel refused");
 
     /* the range math with the calibration: the full travel = the full range, each BEND RANGE */
-    for (ok = 1, i = 0; i < BEND_N; i++) {
+    for (ok = 1, i = 1; i < BEND_N; i++) {              /* (0: OFF, below) */
         uint32_t st = BEND_ST[i];
         int32_t full = (int32_t)st * 4096, half;
         memset(&w, 0, sizeof w);
@@ -115,9 +138,9 @@ static void new_features(void)
         ok &= pb(&w, &c, 451, st) == -full && pb(&w, &c, 448, st) == -full;   /* full down (the taught end, the stop) */
         ok &= pb(&w, &c, 633, st) == full && pb(&w, &c, 636, st) == full;
     }
-    check(ok, "taught: full down / up = -/+ BEND RANGE (1..12), half way = half, the dead band");
+    check(ok, "taught: full down / up = -/+ BEND (0..12), half way = half, the dead band");
     memset(&w, 0, sizeof w);
-    snprintf(b, sizeof b, "BEND RANGE 2: +2 semitones = %d/4096 at full up", (int)pb(&w, &c, 640, 2));
+    snprintf(b, sizeof b, "BEND UP 2: +2 semitones = %d/4096 at full up", (int)pb(&w, &c, 640, 2));
     check(pb(&w, &c, 640, 2) == 2 * 4096, b);
 
     /* power-on: a wheel resting near the taught rest is the centre; one held is not */

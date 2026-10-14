@@ -121,8 +121,8 @@ static void smk_faders(void)
 }
 
 /* the wheels (stock: mux C address 4 = pitch, 5 = mod; the travel is short: raw ~445..640 pitch, ~474..629 mod on a
- * unit): smk_wheel.h, taught by HARDWARE CALIBRATION (wcal) or calibrating themselves; pitch +-BEND RANGE semitones
- * (bend_st), mod 0..127, up = more (voice.c perf_*) */
+ * unit): smk_wheel.h, taught by HARDWARE CALIBRATION (wcal) or calibrating themselves; pitch BEND UP / DOWN semitones
+ * (bend_up, bend_dn), mod 0..127, up = more (voice.c perf_*) */
 static void smk_wheels(void)
 {
     static smk_pw_t pw;
@@ -137,7 +137,7 @@ static void smk_wheels(void)
         mw = zm;
         gen = wcal_gen;
     }
-    perf_bend = smk_pw_bend(&pw, &wcal, fm1_in.wheel[0], fm1_ms, bend_st);
+    perf_bend = smk_pw_bend(&pw, &wcal, fm1_in.wheel[0], fm1_ms, bend_up, bend_dn);
     perf_modw = smk_mw_val(&mw, &wcal, fm1_in.wheel[1]);
 }
 #endif
@@ -273,7 +273,11 @@ static void fm1_main(void)
                 uint32_t k10;
                 knob += (a * 16 - knob) / 8;
                 k10 = (uint32_t)(knob / 16);
+#if BOARD_SMK37
+                song.master_q12 = smk_master_q12(k10, lim_classic);   /* (HOME menu > AUDIO > LIMITER: its knob law, fx.c) */
+#else
                 song.master_q12 = (k10 * k10) >> 8;            /* 0 .. ~4096 */
+#endif
             }
         }
         {   /* OCT- + OCT+ held 5 s, stopped: enter UBOOT with RAM intact (debug / update); a countdown

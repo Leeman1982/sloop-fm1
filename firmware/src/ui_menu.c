@@ -1,23 +1,30 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* SLOOP menu (HOME held), in sections as the pages are (2.4): SCREEN (COLOR, ZOOM), LIGHTS (LIGHTS, KEYS, NOTES),
- * AUDIO (LOWCUT, USB AUDIO, USB SERIAL; SMK-37: KEY VELOCITY), SMK-37: MIDI (TRS MIDI OUT, BEND RANGE), SYSTEM
- * (HARDWARE CALIBRATION, LEARN CLEAR (2.6), ABOUT).
+/* SLOOP menu (HOME held), in sections as the pages are (2.4): SCREEN (COLOR, ZOOM; SMK-37: KNOB LAYOUT), LIGHTS
+ * (LIGHTS, KEYS, NOTES), AUDIO (LOWCUT, USB AUDIO, USB SERIAL; SMK-37: LIMITER), SMK-37: MIDI (TRS MIDI OUT, BEND UP,
+ * BEND DOWN, KEY VELOCITY), SYSTEM (HARDWARE CALIBRATION, LEARN CLEAR (2.6), ABOUT).
  * SELECT goes to the section before / after (stopping at the ends), KNOB 1..3 (a fourth row: 4) set the section's
  * settings in order (the knob's colour marks its row), PRESETS moves the cursor; OCT+ steps the cursor's setting
  * round or opens it (CALIBRATION, ABOUT), OCT- closes (from ABOUT: back to the section). */
 /* ------------------------------------------------------------ menu --- */
-enum { MI_COLOR, MI_ZOOM, MI_LIGHTS, MI_KEYS, MI_NOTES, MI_LOWCUT, MI_USB, MI_SERIAL,
+enum { MI_COLOR, MI_ZOOM,
 #if BOARD_SMK37
-       MI_VEL,                                     /* SMK-37: AUDIO > KEY VELOCITY (K8), smk_vel.h */
-       MI_TRS, MI_BEND,                            /* SMK-37: MIDI > TRS MIDI OUT (K5, smk_midi_out.h), BEND RANGE (K6,
-                                                    * smk_wheel.h) */
+       MI_KLAY,                                    /* SMK-37: SCREEN > KNOB LAYOUT (panel.c knob_enc) */
+#endif
+       MI_LIGHTS, MI_KEYS, MI_NOTES, MI_LOWCUT, MI_USB, MI_SERIAL,
+#if BOARD_SMK37
+       MI_LIMIT,                                   /* SMK-37: AUDIO > LIMITER (fx.c lim_classic) */
+       MI_TRS, MI_BUP, MI_BDN, MI_VEL,             /* SMK-37: MIDI > TRS MIDI OUT (smk_midi_out.h), BEND UP, BEND DOWN
+                                                    * (smk_wheel.h), KEY VELOCITY (smk_vel.h) */
 #endif
        MI_PANEL, MI_LCLEAR, MI_ABOUT, MI_COUNT };
-static const char *const MI_NAME[MI_COUNT] = {"COLOR", "ZOOM", "LIGHTS", "KEYS", "NOTES", "SPEAKER LOWCUT", "USB AUDIO",
-                                              "USB SERIAL",
+static const char *const MI_NAME[MI_COUNT] = {"COLOR", "ZOOM",
 #if BOARD_SMK37
-                                              "KEY VELOCITY", "TRS MIDI OUT", "BEND RANGE",
+                                              "KNOB LAYOUT",
+#endif
+                                              "LIGHTS", "KEYS", "NOTES", "SPEAKER LOWCUT", "USB AUDIO", "USB SERIAL",
+#if BOARD_SMK37
+                                              "LIMITER", "TRS MIDI OUT", "BEND UP", "BEND DOWN", "KEY VELOCITY",
 #endif
                                               "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT"};
 #define MI_SYS0 MI_PANEL
@@ -69,11 +76,19 @@ static const char *mi_value(uint32_t i, uint16_t *c)
             return "NOT SENDING";
         }
         return trs_out ? "ON" : "OFF";
-    case MI_BEND: {                                   /* +-semitones of the pitch wheel, the internal sounds */
-        static char b[16];
-        fmt_int(b, (int32_t)bend_st);
-        str_cpy(b + str_len(b), bend_st == 1u ? " SEMITONE" : " SEMITONES", 11);
-        return b;
+    case MI_KLAY: return knob_layout ? "SMK" : "FM-1";
+    case MI_LIMIT: return lim_classic ? "CLASSIC" : "SOFT";
+    case MI_BUP:
+    case MI_BDN: {                                    /* semitones of the pitch wheel up / down, the internal sounds */
+        static char b[2][16];
+        uint32_t st = i == MI_BUP ? bend_up : bend_dn;
+        char *t = b[i == MI_BDN];
+        if (!st)
+            return "OFF";
+        t[0] = i == MI_BUP ? '+' : '-';
+        fmt_int(t + 1, (int32_t)st);
+        str_cpy(t + str_len(t), st == 1u ? " SEMITONE" : " SEMITONES", 11);
+        return t;
     }
 #endif
     case MI_LCLEAR: {                                 /* (2.6) the CCs MIDI LEARN holds; OCT+ clears them */
@@ -100,7 +115,8 @@ static void draw_menu(void)
                    settings.zoom * 104729u + lights_lvl * 1299709u + lights_keys * 15485863u + ml_count() * 2654435u +
                    lights_notes * 32452843u + usb_full * 49979687u + usb_serial * 86028121u;
 #if BOARD_SMK37
-    sig += vel_mode * 179424673u + trs_out * 373587883u + smo.dead * 573259391u + bend_st * 817504243u;
+    sig += vel_mode * 179424673u + trs_out * 373587883u + smo.dead * 573259391u + bend_up * 817504243u +
+           bend_dn * 941083987u + lim_classic * 1500450271u + knob_layout * 2147483647u;
 #endif
     if (!ui.force && sig == ui.menu_sig)
         return;
@@ -160,7 +176,7 @@ static void draw_menu(void)
                 uint16_t vc;
                 const char *v = mi_value(i, &vc);
 #if BOARD_SMK37
-                char k[4] = {'K', (char)('5' + r), 0, 0};   /* (the SMK-37's K5..K8 are KNOB 1..4) */
+                char k[4] = {'K', knob_digit(EN_K1 + r), 0, 0};   /* (KNOB 1..4: K5..K8, or K1..K4, KNOB LAYOUT) */
 #else
                 char k[4] = {'K', (char)('1' + r), 0, 0};
 #endif
@@ -183,12 +199,18 @@ static void draw_menu(void)
                     cv_text(xv + 8, y + 30, &FONT_S, "RESTART", C_AMB);   /* (usb.c: at the next start) */
             }
 #if BOARD_SMK37
-            if (MS_FIRST[sec + 1u] - MS_FIRST[sec] <= 3u)   /* (a fourth row, K8: no room for the help) */
-#endif
+            if (MS_FIRST[sec + 1u] - MS_FIRST[sec] <= 3u) {   /* (a fourth row: no room for the help) */
+                char h[24] = "K2 SECTION  K5-K8 SET";       /* the knobs as KNOB LAYOUT has them */
+                h[1] = knob_digit(EN_SELECT), h[13] = knob_digit(EN_K1), h[16] = knob_digit(EN_K4);
+                cv_text(4, MI_Y0 + 3 * MI_DY + 6, &FONT_S, h, C_DIM);
+                cv_text(4, MI_Y0 + 3 * MI_DY + 22, &FONT_S, "OCT+ OK   OCT- CLOSE", C_DIM);
+            }
+#else
             {
                 cv_text(4, MI_Y0 + 3 * MI_DY + 6, &FONT_S, "SELECT SECTION  KNOB SETS", C_DIM);
                 cv_text(4, MI_Y0 + 3 * MI_DY + 22, &FONT_S, "OCT+ OK   OCT- CLOSE", C_DIM);   /* (rows .. 218) */
             }
+#endif
         }
         cv_oy = 0;
         cv_blit(0, H_HEAD + 1 + pass * 124u);
@@ -241,8 +263,19 @@ static void mi_set(uint32_t i, int32_t s)
     case MI_TRS:                                       /* right ON, left OFF; OCT+ toggles (ON tries the UART again) */
         smo_on(s > 0 ? 1u : s < 0 ? 0u : !trs_out);
         break;
-    case MI_BEND:                                      /* 1, 2, 3, 4, 5, 7, 12 (stops at the ends); OCT+ steps round */
-        bend_st = (uint8_t)bend_step(bend_st, s);
+    case MI_BUP:                                       /* 0 (OFF), 1, 2, 3, 4, 5, 7, 12 (stops at the ends); OCT+ steps round */
+        bend_up = (uint8_t)bend_step(bend_up, s);
+        break;
+    case MI_BDN:
+        bend_dn = (uint8_t)bend_step(bend_dn, s);
+        break;
+    case MI_LIMIT:                                     /* right CLASSIC, left SOFT; OCT+ toggles */
+        lim_classic = (uint8_t)(s > 0 ? 1u : s < 0 ? 0u : !lim_classic);
+        break;
+    case MI_KLAY:                                      /* right SMK, left FM-1; OCT+ toggles. The rows' knobs move with it */
+        knob_layout = (uint8_t)(s > 0 ? 1u : s < 0 ? 0u : !knob_layout);
+        knob_layout_apply();
+        ui.force = 1;
         break;
     case MI_VEL:                                       /* DYNAMIC .. FIXED 127 (stops at the ends); OCT+ steps round */
         if (s > 0 && vel_mode + 1u < VEL_N)

@@ -14,7 +14,7 @@
 static uint32_t vage;                                   /* voice ages: one clock for every part */
 #if BOARD_SMK37
 /* the SMK-37 Pro's wheels (main.c smk_wheels), on the selected synth track: the pitch wheel bends
- * (1/4096 semitone, +-HOME menu > MIDI > BEND RANGE semitones, smk_wheel.h), the mod wheel adds a vibrato of its
+ * (1/4096 semitone, HOME menu > MIDI > BEND UP / DOWN semitones, smk_wheel.h), the mod wheel adds a vibrato of its
  * own (a triangle at SMK_VIB_HZ from the 24 MHz time base, not the preset's LFO; 0..127 = up to +-1 semitone) */
 #define SMK_VIB_HZ 10u
 #define SMK_VIB_K (SMK_VIB_HZ * 179u)          /* phase per TIMER4 tick: 2^32 / 24e6 = 178.96 */

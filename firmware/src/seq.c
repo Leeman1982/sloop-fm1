@@ -1686,12 +1686,47 @@ static void audition_block(void)
 static uint8_t ext_note[FM1_NKEY], ext_trk[FM1_NKEY];   /* note + 1 sounding, 0 = none; 0x80 | lane: a drum */
 static const int8_t EXT_LANE[FM1_NKEY] = {0, 0, 2, 2, 4, [32] = 15, [33] = 5, [34] = 5, [35] = 11, [36] = 12};
 static uint32_t ext_quiet[16];                    /* a lane hit from an outer key: no pad light until (ms) */
+/* the pads, DRUM KIT (smk_input.h, the default; KNOB BANK + FADER BANK: STEPS): the drum kit whatever track is selected,
+ * a pad a sound as on the drum track, at the pad's velocity (KEY VELOCITY; OCT- / OCT+ held: ghost / hard); the keys
+ * keep playing the selected track. Played live, as the outer keys' drums (recorded when the drum track is armed).
+ * STEPS: a pad is a step of the page (lk_q KB_PADSTEP, ui_input.c: as the SEQ layer's step keys) */
+#define KB_PADSTEP (LY_COUNT + 1u)
+static uint16_t pad_drum_on;                      /* lanes a pad holds (their MIDI note-off at its release) */
+static void pad_drum(uint32_t lane, uint32_t v)
+{
+    uint32_t mc = trk_midi_ch(TRK_DRUM), lvl;
+    lane &= 15u;
+    if (!v) {
+        if (!((pad_drum_on >> lane) & 1u))
+            return;
+        pad_drum_on &= (uint16_t)~(1u << lane);
+        if (ft_on && ft_trk == TRK_DRUM)
+            ft_note_off(lane);
+        midi_out_event(0x08u | (0x80u | mc) << 8 | (uint32_t)LANE_NOTE[lane] << 16);
+        return;
+    }
+    if (layer_now() != LY_PLAY || ((pad_drum_on >> lane) & 1u))
+        return;
+    lvl = smk_vel_lvl(v);
+    pad_drum_on |= (uint16_t)(1u << lane);
+    drum_input(lane, lvl, 0, 1);
+    midi_out_event(0x09u | (0x90u | mc) << 8 | (uint32_t)LANE_NOTE[lane] << 16 | lvl_vel(lvl, 100) << 24);
+}
 static void ext_keys_block(void)
 {
     int32_t e;
     while ((e = smk_extkey_take()) >= 0) {
         uint32_t k = (uint32_t)e >> 8, v = vel_apply(vel_mode, (uint32_t)e & 0xFFu), sel = song.sel % NTRK, mc;
         track_t *t = &trk[sel];
+        if (k >= SMK_EXT_STEP) {                          /* STEPS: a pad, its step */
+            if (k - SMK_EXT_STEP < 16u)
+                lk_push(KB_PADSTEP, k - SMK_EXT_STEP, v != 0u);
+            continue;
+        }
+        if (k >= SMK_EXT_PAD) {                           /* DRUM KIT: a pad, its lane */
+            pad_drum(k - SMK_EXT_PAD, v);
+            continue;
+        }
         if (k >= FM1_NKEY)
             continue;
         if (!v) {

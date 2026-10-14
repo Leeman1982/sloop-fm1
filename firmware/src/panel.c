@@ -11,8 +11,8 @@ enum { B_FX, B_SCL, B_ENV, B_LFO, B_EDIT, B_GLO, B_HOME, B_SAVE, B_ARP, B_SEQ, B
 enum { EN_SELECT, EN_ALGO, EN_PRESET, EN_K1, EN_K2, EN_K3, EN_K4, NE };
 static const char *const B_NAME[NB] = {"FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE",
                                         "ARP", "SEQ", "PLAY", "REC", "OCT-", "OCT+"};
-#if BOARD_SMK37                          /* (the SMK-37's knobs as printed: K5..K8 are KNOB 1..4) */
-static const char *const E_NAME[NE] = {"K2 SELECT", "K3 ALGORITHM", "K4 PRESETS", "K5", "K6", "K7", "K8"};
+#if BOARD_SMK37
+#include "smk_knobs.h"                   /* the SMK-37's knobs as printed: HOME menu > SCREEN > KNOB LAYOUT, E_NAME */
 #else
 static const char *const E_NAME[NE] = {"SELECT", "ALGORITHM", "PRESETS", "KNOB 1", "KNOB 2",
                                         "KNOB 3", "KNOB 4"};
@@ -36,7 +36,8 @@ panel_t panel __attribute__((section(".noinit")));
  * FX = FX, SCALE = SEL, CHORD = ENV, NOTE REPEAT = LFO, PARA = EDIT, GLOBE = GLO, PATCH = HOME, BT = SAVE,
  * ARP, SEQ as printed, SEQ PLAY = PLAY, SEQ REC = REC, OCTAVE- / + as printed. KNOB BANK, FADER BANK, < and >
  * stay free. Knobs as the FM-1's top row: K1 = MASTER (smk_input.h: the FM-1's MASTER pot, as a virtual one),
- * K2 = SELECT, K3 = ALGORITHM (track), K4 = PRESETS; K5..K8 = KNOB 1..4 (the screen's four dials).
+ * K2 = SELECT, K3 = ALGORITHM (track), K4 = PRESETS; K5..K8 = KNOB 1..4 (the screen's four dials); or the other way
+ * round (HOME menu > SCREEN > KNOB LAYOUT, knob_enc).
  * HARDWARE CALIBRATION (OCT- + OCT+ at power-on) re-teaches all of it. */
 static const panel_t PANEL_DEFAULT = {
     PANEL_MAGIC,
@@ -53,6 +54,23 @@ static const panel_t PANEL_DEFAULT = {
 };
 #endif
 
+#if BOARD_SMK37
+/* KNOB LAYOUT (smk_knobs.h): the encoder of a role and its direction, from the calibration's slot of the knob that has
+ * it now. The knobs are endless: a new layout takes over at once, there is nothing to pick up */
+static uint32_t knob_enc(uint32_t role, int32_t *dir)
+{
+    uint32_t k = knob_of(role);
+    *dir = k ? panel.dir[k - 1u] : 1;
+    return k ? panel.enc[k - 1u] % FM1_NENC : SMK_ENC_MASTER;
+}
+static void knob_layout_apply(void)              /* (the layout or the calibration changed) */
+{
+    int32_t d;
+    smk_master_enc = (uint8_t)knob_enc(EN_MASTER, &d);
+    smk_master_dir = (int8_t)(d < 0 ? -1 : 1);
+}
+#endif
+
 static void panel_init(void)                     /* also after a flash load: ids are used as array indexes and shifts */
 {
     uint32_t i, ok = panel.magic == PANEL_MAGIC;
@@ -62,6 +80,9 @@ static void panel_init(void)                     /* also after a flash load: ids
         ok = panel.enc[i] < FM1_NENC && (panel.dir[i] == 1 || panel.dir[i] == -1);
     if (!ok)
         panel = PANEL_DEFAULT;
+#if BOARD_SMK37
+    knob_layout_apply();
+#endif
 }
 
 static uint32_t panel_btn_of(uint32_t matrix_id)        /* label of a matrix button, NB if none */
@@ -85,7 +106,15 @@ static int32_t panel_enc(uint32_t role)
     int32_t s;
     if ((enc_hold >> role) & 1u)
         return 0;
+#if BOARD_SMK37
+    {
+        int32_t d;
+        uint32_t e = knob_enc(role, &d);         /* (HOME menu > SCREEN > KNOB LAYOUT) */
+        s = fm1_enc_take(e) * d;
+    }
+#else
     s = fm1_enc_take(panel.enc[role]) * panel.dir[role];
+#endif
     if (s)
         ui_input_ms = fm1_ms;                      /* a knob turning is not idle either: autosave waits */
     return s;

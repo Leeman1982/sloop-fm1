@@ -2,7 +2,8 @@
  * SMK-37 Pro port: Copyright (C) 2026 M. Geisler (genkigenki/makkuro) */
 /* The SMK-37's wheels (main.c smk_wheels; voice.c applies them to the selected synth track). No hardware here: the
  * host tests (tests/smk_wheel_test.c) run it.
- * Pitch wheel: raw ADC reading -> 1/4096 semitone, +-bend_st semitones (HOME menu > MIDI > BEND RANGE). Taught by
+ * Pitch wheel: raw ADC reading -> 1/4096 semitone, +bend_up / -bend_dn semitones (HOME menu > MIDI > BEND UP, BEND
+ * DOWN). Taught by
  * HARDWARE CALIBRATION (smk_wcal_t: the rest, full down, full up): the full travel gives the full range, the dead band
  * fits the wheel's noise, and at power-on a wheel resting within the dead band of the taught rest is the centre (a
  * wheel held at power-on: the taught rest). Not taught: the first reading is the centre, the ends start SMK_PW_SPAN0
@@ -81,12 +82,15 @@ static int smk_wcal_mod(smk_wcal_t *c, int32_t rlo, int32_t rhi, int32_t up)
     return 1;
 }
 
-/* HOME menu > MIDI > BEND RANGE: the pitch wheel's range on the internal sounds, +-semitones. Kept in the settings
- * (project.c midi_part_fill: a spare byte of the MIDI part, 0 = the default; older data: 7, the range before the setting) */
-#define BEND_N 7u
+/* HOME menu > MIDI > BEND UP, BEND DOWN: the pitch wheel's range on the internal sounds, semitones up and down (0: that
+ * way does not bend). Kept in the settings (project.c midi_part_fill: two spare bytes of the MIDI part). UP's byte is
+ * 2.6.4's BEND RANGE (0 = the default 7, BEND_NONE = 0); DOWN's: 0 = as UP, so 2.6.4's range (and older data: 7)
+ * comes back as both */
+#define BEND_N 8u
 #define BEND_DEF 7u
-static const uint8_t BEND_ST[BEND_N] = {1, 2, 3, 4, 5, 7, 12};
-static uint8_t bend_st = BEND_DEF;
+#define BEND_NONE 0x80u                              /* (the byte of 0 semitones) */
+static const uint8_t BEND_ST[BEND_N] = {0, 1, 2, 3, 4, 5, 7, 12};
+static uint8_t bend_up = BEND_DEF, bend_dn = BEND_DEF;
 static uint32_t bend_idx(uint32_t st)                /* its place in BEND_ST, BEND_N if none */
 {
     uint32_t i;
@@ -94,8 +98,16 @@ static uint32_t bend_idx(uint32_t st)                /* its place in BEND_ST, BE
         ;
     return i;
 }
-static uint32_t bend_of_byte(uint32_t b) { return bend_idx(b) < BEND_N ? b : BEND_DEF; }
-static uint32_t bend_byte(uint32_t st) { return st == BEND_DEF || bend_idx(st) >= BEND_N ? 0u : st; }
+static uint32_t bend_of_byte(uint32_t b, uint32_t none)   /* a byte -> semitones; 0 or a bad one: none */
+{
+    if (b == BEND_NONE)
+        return 0u;
+    return b && bend_idx(b) < BEND_N ? b : none;
+}
+static uint32_t bend_up_of_byte(uint32_t b) { return bend_of_byte(b, BEND_DEF); }
+static uint32_t bend_dn_of_byte(uint32_t b, uint32_t up) { return bend_of_byte(b, up); }
+static uint32_t bend_up_byte(uint32_t st) { return st == BEND_DEF || bend_idx(st) >= BEND_N ? 0u : st ? st : BEND_NONE; }
+static uint32_t bend_dn_byte(uint32_t st, uint32_t up) { return st == up || bend_idx(st) >= BEND_N ? 0u : st ? st : BEND_NONE; }
 static uint32_t bend_step(uint32_t st, int32_t s)    /* a knob turn s (stops at the ends), 0: the next, round */
 {
     uint32_t i = bend_idx(st);
@@ -113,8 +125,8 @@ typedef struct {
     uint32_t drift_ms;            /* when the centre last moved (or the wheel left the dead band) */
 } smk_pw_t;
 
-/* the bend for reading p, +-st semitones (1/4096 semitone) */
-static int32_t smk_pw_bend(smk_pw_t *w, const smk_wcal_t *c, int32_t p, uint32_t now_ms, uint32_t st)
+/* the bend for reading p, up to +st_up / -st_dn semitones (1/4096 semitone) */
+static int32_t smk_pw_bend(smk_pw_t *w, const smk_wcal_t *c, int32_t p, uint32_t now_ms, uint32_t st_up, uint32_t st_dn)
 {
     int32_t d, b, up, dn, full;
     if (!w->pc) {
@@ -134,8 +146,6 @@ static int32_t smk_pw_bend(smk_pw_t *w, const smk_wcal_t *c, int32_t p, uint32_t
             w->pc = 1;
         w->drift_ms = now_ms;
     }
-    st = st < 1u ? 1u : st > 12u ? 12u : st;
-    full = (int32_t)st * 4096;
     if (p < w->plo)
         w->plo = p;
     if (p > w->phi)
@@ -151,6 +161,7 @@ static int32_t smk_pw_bend(smk_pw_t *w, const smk_wcal_t *c, int32_t p, uint32_t
     w->drift_ms = now_ms;                                /* (bent: the drift waits until it rests again) */
     up = w->phi - w->pc - w->dead;
     dn = w->pc - w->plo - w->dead;
+    full = (int32_t)(d > 0 ? (st_up > 12u ? 12u : st_up) : (st_dn > 12u ? 12u : st_dn)) * 4096;   /* (0: no bend) */
     b = d > 0 ? (d - w->dead) * full / (up > 1 ? up : 1) : (d + w->dead) * full / (dn > 1 ? dn : 1);
     return b < -full ? -full : b > full ? full : b;
 }
