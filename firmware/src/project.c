@@ -723,12 +723,32 @@ static void wcal_save(void)
     if (memcmp(&wcal, &wcal_saved, sizeof wcal) && st_save(OBJ_WCAL, &wcal, sizeof wcal) == 0)
         wcal_saved = wcal;
 }
+/* SMK-37: DAW mode (MODE, CHANNEL, LOCAL, CC MAP, KNOBS, the USER map: smk_daw.h daw_store_t) in an object of its own
+ * (storage.c OBJ_DAW); none or older data: SYNTH, channel 1, LOCAL OFF, the DEFAULT map, ABSOLUTE */
+static daw_store_t daw_saved __attribute__((section(".pool")));
+static void daw_boot(void)
+{
+    int n = st_load(OBJ_DAW, &daw_saved, sizeof daw_saved);
+    if (n > 0)
+        daw_store_take((const uint8_t *)&daw_saved, (uint32_t)n);
+    daw_store_fill(&daw_saved);
+}
+static void daw_save(void)
+{
+    daw_store_t d;
+    daw_store_fill(&d);
+    if (memcmp(&d, &daw_saved, sizeof d) && st_save(OBJ_DAW, &d, sizeof d) == 0)
+        daw_saved = d;
+}
 #endif
 
 static void persist_boot(void)                    /* before settings_init / panel_init */
 {
 #if FELUCCA_ARRANGER
     arr_defaults(&arrangement);
+#endif
+#if BOARD_SMK37
+    daw_reset_user();                              /* SMK-37: the USER map starts as the DEFAULT (flash: daw_boot) */
 #endif
 #if FELUCCA_FLASH
     persist_t p;
@@ -799,6 +819,7 @@ static void persist_boot(void)                    /* before settings_init / pane
     dsu_boot();                                    /* SLOOP 2.5: the SYN kits (after the settings) */
 #if BOARD_SMK37
     wcal_boot();                                   /* SMK-37: the wheels' calibration */
+    daw_boot();                                    /* SMK-37: DAW mode */
 #endif
     up_boot();                                     /* user presets */
     fm6_bank_boot();                               /* the FM6 patch bank (fm6_bank.c) */
@@ -942,6 +963,7 @@ static void settings_save(void)
     persist_fill(&p);
 #if BOARD_SMK37
     wcal_save();
+    daw_save();
 #endif
     {
         uint8_t mp[MIDI_PART];

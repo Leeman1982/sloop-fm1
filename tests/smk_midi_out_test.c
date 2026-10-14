@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* SMK-37 TRS MIDI OUT (firmware/src/smk_midi_out.h) against a simulated UART: the bytes of each USB-MIDI packet
- * (notes, CC, program change, pitch bend, clock; SysEx and broken packets not sent), whole messages in order through
+ * (notes, CC, program change, pitch bend, clock; SysEx and broken packets not sent; DAW mode's MMC whole, smo_raw),
+ * whole messages in order through
  * the ring, one byte at a time only once the UART has finished the last, a full ring drops whole messages, TRS MIDI
  * OUT OFF sends nothing, and a UART that never finishes neither hangs the tick nor fills up: the jack goes quiet,
  * and setting it ON again tries again. */
@@ -108,6 +109,28 @@ int main(void)
     smo_put(PKT(9, 0x90, 60, 100));
     tick(100);
     check(ut_len == 3, "set ON again: sent");
+
+    reset();                                           /* DAW mode's MMC: a whole SysEx message as it is (smo_raw) */
+    {
+        static const uint8_t mmc[6] = {0xF0, 0x7F, 0x7F, 0x06, 0x02, 0xF7};
+        smo_put(PKT(9, 0x90, 60, 100));
+        smo_raw(mmc, 6);
+        smo_put(PKT(8, 0x80, 60, 0));
+        tick(300);
+        {
+            static const uint8_t want[] = {0x90, 60, 100, 0xF0, 0x7F, 0x7F, 0x06, 0x02, 0xF7, 0x80, 60, 0};
+            check(bytes_are(want, sizeof want), "DAW mode's MMC (smo_raw): F0 7F 7F 06 02 F7 whole, between the notes");
+        }
+        reset();
+        for (i = 0; i < 84u; i++)
+            smo_put(PKT(9, 0x90, i, 100));
+        smo_raw(mmc, 6);
+        check(smo.w - smo.r == 252u && smo.drops == 1u, "... no room for all six: dropped whole");
+        reset();
+        trs_out = 0;
+        smo_raw(mmc, 6);
+        check(smo.w == smo.r, "... TRS MIDI OUT OFF: nothing");
+    }
 
     reset();                                           /* no UART: the byte never finishes */
     ut_dead = 1;

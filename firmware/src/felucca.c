@@ -81,6 +81,7 @@
 #if BOARD_SMK37
 #include "smk_vel.h"          /* SMK-37: menu KEY VELOCITY (DYNAMIC, curves, FIXED), read by seq.c */
 #include "smk_wheel.h"        /* SMK-37: the wheels, their calibration, menu BEND UP / DOWN (main.c smk_wheels) */
+#include "smk_daw.h"          /* SMK-37: DAW mode, the map and its messages (seq.c: keys, pads; ui_daw.c: the rest) */
 #endif
 #define FELUCCA_ARRANGER 1
 #include "arranger.c"
@@ -104,6 +105,7 @@
 #include "ui_input.c"
 #if BOARD_SMK37
 #include "ui_fbank.c"         /* SMK-37 Pro: the FADER BANK screen */
+#include "ui_daw.c"           /* SMK-37: DAW mode: its input, screens, lights and map editor */
 #endif
 #ifndef FELUCCA_FLASH
 #define FELUCCA_FLASH 1          /* flash driver + storage.c */

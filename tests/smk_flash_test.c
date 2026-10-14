@@ -73,6 +73,8 @@ int main(void)
           st_sector(OBJ_SETTINGS, 0) == 0xAD000u && st_sector(OBJ_SETTINGS, 1) == 0xAE000u && st_sector(OBJ_PROJECT0, 0) == 0x9D000u);
     check("storage.c: the wheels' calibration (OBJ_WCAL) 0xB1000/0xB2000 (owner tag 0xAF000, 0xB0000 left alone)",
           st_sector(OBJ_WCAL, 0) == 0xB1000u && st_sector(OBJ_WCAL, 1) == 0xB2000u && ST_OWNER_OFF == 0xAF000u);
+    check("storage.c: DAW mode (OBJ_DAW) 0xB3000/0xB4000, below the update staging 0xBB000",
+          st_sector(OBJ_DAW, 0) == 0xB3000u && st_sector(OBJ_DAW, 1) == 0xB4000u && st_sector(OBJ_DAW, 1) + 0x1000u <= 0xBB000u);
     check("FL_PLAIN_LO = the VM start 0x9D000", FL_PLAIN_LO == 0x9D000u);
     check("FL_JEDEC_OK: the SMK part 0xEB6014 and 0x856014 only", FL_JEDEC_OK(0xEB6014u) && FL_JEDEC_OK(0x856014u) &&
           !FL_JEDEC_OK(0u) && !FL_JEDEC_OK(0xFFFFFFu) && !FL_JEDEC_OK(0xEB6015u));

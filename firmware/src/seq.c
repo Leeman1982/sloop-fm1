@@ -1716,12 +1716,154 @@ static void pad_drum(uint32_t lane, uint32_t v)
     drum_input(lane, lvl, 0, 1);
     midi_out_event(0x09u | (0x90u | mc) << 8 | (uint32_t)LANE_NOTE[lane] << 16 | lvl_vel(lvl, 100) << 24);
 }
+/* DAW mode (smk_daw.h), the audio context's part: the 37 keys and the 16 pads. A key: a note on CHANNEL, C3 (48) the
+ * lowest at octave 0 (OCT- / OCT+), at its velocity (KEY VELOCITY); a pad: its entry of the pad bank. LOCAL ON: a key
+ * also plays the selected track, a NOTE pad the drum kit (a GM drum note). What a press sent, its release ends, whatever
+ * changed meanwhile (the map, the bank, LOCAL, the mode). While the map is edited (daw_edit) a pad only picks itself */
+static uint8_t daw_isr;                           /* the mode the keys last ran in (follows daw_on) */
+static uint8_t daw_edit;                          /* the map editor is up (ui_daw.c): 1 waiting for a control, 2 setting one */
+static int8_t daw_oct;                            /* the keys' octave, -3..3 (OCT- / OCT+) */
+static uint8_t daw_pbank;                         /* the pads' bank (KNOB BANK + FADER BANK) */
+static uint32_t daw_kprev;                        /* the 27 note keys as last seen (fm1_in.knotes) */
+static uint8_t daw_knote[FM1_NKEY], daw_kch[FM1_NKEY], daw_ktrk[FM1_NKEY];   /* a key's note + 1 sent, its channel,
+                                                                              * its LOCAL track + 1 (0: none) */
+static uint32_t daw_prel[SMK_NPAD];               /* a pad's release: its packet (0 none) */
+static uint8_t daw_plocal[SMK_NPAD];              /* a pad's LOCAL drum note + 1 */
+static uint16_t daw_pdown;                        /* pads held (the lights) */
+static uint8_t daw_tog[DAW_N];                    /* CC TOGGLE states (pads here, buttons ui_daw.c) */
+static uint32_t daw_tog_t[DAW_N] __attribute__((section(".pool")));   /* (their last flip, ms | 1) */
+static volatile uint8_t daw_touch_pad;            /* a pad hit: entry + 1 (the editor picks it; the screen shows it) */
+static volatile uint16_t daw_last, daw_last_v;    /* the last control: entry + 1 (DAW_KEYS + 1: a key), the value sent */
+static volatile uint32_t daw_last_n;              /* (bumped by each: the screen redraws) */
+static void daw_shown(uint32_t i, uint32_t v)
+{
+    daw_last = (uint16_t)(i + 1u);
+    daw_last_v = (uint16_t)v;
+    daw_last_n++;
+}
+static void daw_key(uint32_t k, uint32_t v)       /* keybed key k (0 = the lowest C), velocity v (0: let go) */
+{
+    if (k >= FM1_NKEY)
+        return;
+    if (!v) {
+        if (!daw_knote[k])
+            return;
+        midi_out_event(daw_note_pkt(daw_kch[k], daw_knote[k] - 1u, 0));
+        if (daw_ktrk[k])
+            input_off(&trk[(daw_ktrk[k] - 1u) % NTRK], daw_knote[k] - 1u);
+        daw_knote[k] = daw_ktrk[k] = 0;
+        return;
+    }
+    if (daw_knote[k])
+        return;
+    {
+        int32_t n = (int32_t)DAW_NOTE0 + (int32_t)k + 12 * daw_oct;
+        uint32_t note = (uint32_t)(n < 0 ? 0 : n > 127 ? 127 : n);
+        daw_knote[k] = (uint8_t)(note + 1u);
+        daw_kch[k] = (uint8_t)((daw_ch - 1u) & 15u);
+        midi_out_event(daw_note_pkt(daw_kch[k], note, v));
+        if (daw_local) {
+            daw_ktrk[k] = (uint8_t)(song.sel % NTRK + 1u);
+            input_on(&trk[song.sel % NTRK], note, v);
+        }
+        daw_shown(DAW_KEYS, note << 8 | v);
+    }
+}
+static void daw_pad(uint32_t pad, uint32_t v)     /* hardware pad (PAD pad + 1), velocity v (0: let go) */
+{
+    uint32_t i = DAW_PAD0 + 16u * (daw_pbank & 1u) + pad, p[2];
+    daw_ent_t e;
+    pad &= 15u;
+    if (!v) {
+        daw_pdown &= (uint16_t)~(1u << pad);
+        if (daw_prel[pad])
+            midi_out_event(daw_prel[pad]);
+        if (daw_plocal[pad])
+            input_off(TDRUM, daw_plocal[pad] - 1u);
+        daw_prel[pad] = 0;
+        daw_plocal[pad] = 0;
+        return;
+    }
+    if ((daw_pdown >> pad) & 1u)
+        return;
+    daw_pdown |= (uint16_t)(1u << pad);
+    daw_touch_pad = (uint8_t)(i + 1u);
+    if (daw_edit)
+        return;
+    e = daw_ent(i);
+    if (e.type == DT_TOG) {
+        if (!daw_toggle(&daw_tog[i], &daw_tog_t[i], fm1_ms))
+            return;
+        v = daw_tog[i] ? 127u : 0u;
+    } else if (e.type == DT_CC) {
+        v = 127u;
+    }
+    daw_shown(i, v);
+    if (!daw_msg(&e, v, p))
+        return;                                   /* (OFF: the screen says so) */
+    midi_out_event(p[0]);
+    if (e.type == DT_NOTE) {
+        daw_prel[pad] = daw_note_pkt(daw_chan(&e), e.num, 0);
+        if (daw_local && e.num >= 35u && e.num <= 81u) {   /* (a GM drum note: the kit's sound for it) */
+            daw_plocal[pad] = (uint8_t)(e.num + 1u);
+            input_on(TDRUM, e.num, v);
+        }
+    } else if (e.type == DT_CC) {
+        daw_prel[pad] = daw_cc_pkt(daw_chan(&e), e.num, 0);
+    }
+}
+static void daw_all_off(void)                     /* back to SYNTH: every note and held CC of the keys and pads ends */
+{
+    uint32_t k;
+    for (k = 0; k < FM1_NKEY; k++)
+        daw_key(k, 0);
+    for (k = 0; k < SMK_NPAD; k++)
+        if (daw_pdown & (1u << k))
+            daw_pad(k, 0);
+}
+/* the keys follow the mode: to DAW, the synth's keys let go (their notes, and their MIDI, end) and the keys still down
+ * stay silent; to SYNTH, the DAW's notes end and the keys still down stay silent too */
+static void daw_follow(void)
+{
+    uint32_t k;
+    if (daw_isr == daw_on)
+        return;
+    if (daw_on) {
+        for (k = 0; k < 27u; k++)
+            if ((kb_prev >> k) & 1u)
+                key_up(k);
+        kb_prev = 0;
+        daw_kprev = fm1_in.knotes;
+    } else {
+        daw_all_off();
+        kb_prev = fm1_in.notes;
+    }
+    daw_isr = daw_on;
+}
+static void daw_keys_block(void)                  /* the 27 note keys (the outer ten and the pads: ext_keys_block) */
+{
+    uint32_t cur = fm1_in.knotes, ch = cur ^ daw_kprev, k;
+    for (k = 0; ch && k < 27u; k++)
+        if ((ch >> k) & 1u)
+            daw_key(SMK_KEY_F3 + k, (cur >> k) & 1u ? key_vel(k) : 0u);
+    daw_kprev = cur;
+}
+
 static void ext_keys_block(void)
 {
     int32_t e;
     while ((e = smk_extkey_take()) >= 0) {
         uint32_t k = (uint32_t)e >> 8, v = vel_apply(vel_mode, (uint32_t)e & 0xFFu), sel = song.sel % NTRK, mc;
         track_t *t = &trk[sel];
+        if (k >= SMK_EXT_DAW) {                           /* DAW mode: a pad */
+            if (k - SMK_EXT_DAW < SMK_NPAD)
+                daw_pad(k - SMK_EXT_DAW, v);
+            continue;
+        }
+        if (k < FM1_NKEY && (daw_knote[k] || (v && daw_isr))) {   /* DAW mode: an outer key (or the release of one) */
+            daw_key(k, v);
+            continue;
+        }
         if (k >= SMK_EXT_STEP) {                          /* STEPS: a pad, its step */
             if (k - SMK_EXT_STEP < 16u)
                 lk_push(KB_PADSTEP, k - SMK_EXT_STEP, v != 0u);
@@ -1804,8 +1946,13 @@ static void keyboard_block(void)
     if (er_mute && layer_now() != LY_ERASE)
         er_mute = 0;                                  /* EDIT let go: its keys erase again (2.6) */
 #if BOARD_SMK37
+    daw_follow();                                     /* (DAW mode: the keys send MIDI, smk_daw.h) */
     ext_keys_block();
     pick_aud_block();
+    if (daw_isr) {
+        daw_keys_block();
+        return;
+    }
 #endif
     if (!(layer_buttons() & ly_bit[LY_ROLL]))         /* ARP up (and not locked): the rolls end (the keys stay silent) */
         for (r = 0; r < NROLL; r++)

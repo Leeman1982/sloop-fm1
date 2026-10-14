@@ -982,6 +982,12 @@ static int fb_left(void);
 static void fb_set(uint32_t b);
 static void fb_close(void);
 static void fb_expire(void);
+static int daw_screen(void);                    /* ui_daw.c: DAW mode */
+static void daw_switch(uint32_t *pressed);
+static void daw_input(uint32_t pressed, uint32_t now);
+static void daw_leds(void);
+static void daw_set(uint32_t on, int splash);
+static void daw_edit_open(void);
 #endif
 static void vis_draw(void);                     /* ui_vis.c */
 static int vis_shown(void);
@@ -990,6 +996,13 @@ static void ui_draw(void)
 {
     ui.frame++;
     pads_tick();
+#if BOARD_SMK37
+    if (daw_screen()) {                                 /* DAW mode, the mode's screen (ui_daw.c) */
+        ui_timers();
+        ui.force = 0;
+        return;
+    }
+#endif
     if (rec_go) {                                       /* the take started: say so */
         rec_go = 0;
         ui_message("RECORDING");

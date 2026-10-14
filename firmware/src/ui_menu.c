@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* SLOOP menu (HOME held), in sections as the pages are (2.4): SCREEN (COLOR, ZOOM; SMK-37: KNOB LAYOUT), LIGHTS
- * (LIGHTS, KEYS, NOTES), AUDIO (LOWCUT, USB AUDIO, USB SERIAL; SMK-37: LIMITER), SMK-37: MIDI (TRS MIDI OUT, BEND UP,
- * BEND DOWN, KEY VELOCITY), SYSTEM (HARDWARE CALIBRATION, LEARN CLEAR (2.6), ABOUT).
+ * (LIGHTS, KEYS, NOTES), AUDIO (LOWCUT, USB AUDIO, USB SERIAL; SMK-37: LIMITER), SMK-37: PLAY (KEY VELOCITY, BEND UP,
+ * BEND DOWN), MIDI (TRS MIDI OUT, MODE, CHANNEL, LOCAL), DAW (CC MAP, KNOBS, EDIT MAP, RESET MAP), SYSTEM (HARDWARE
+ * CALIBRATION, LEARN CLEAR (2.6), ABOUT).
  * SELECT goes to the section before / after (stopping at the ends), KNOB 1..3 (a fourth row: 4) set the section's
  * settings in order (the knob's colour marks its row), PRESETS moves the cursor; OCT+ steps the cursor's setting
  * round or opens it (CALIBRATION, ABOUT), OCT- closes (from ABOUT: back to the section). */
@@ -14,8 +15,10 @@ enum { MI_COLOR, MI_ZOOM,
        MI_LIGHTS, MI_KEYS, MI_NOTES, MI_LOWCUT, MI_USB, MI_SERIAL,
 #if BOARD_SMK37
        MI_LIMIT,                                   /* SMK-37: AUDIO > LIMITER (fx.c lim_classic) */
-       MI_TRS, MI_BUP, MI_BDN, MI_VEL,             /* SMK-37: MIDI > TRS MIDI OUT (smk_midi_out.h), BEND UP, BEND DOWN
-                                                    * (smk_wheel.h), KEY VELOCITY (smk_vel.h) */
+       MI_VEL, MI_BUP, MI_BDN,                     /* SMK-37: PLAY > KEY VELOCITY (smk_vel.h), BEND UP, BEND DOWN (smk_wheel.h) */
+       MI_TRS, MI_MODE, MI_DCH, MI_LOCAL,          /* SMK-37: MIDI > TRS MIDI OUT (smk_midi_out.h), MODE, CHANNEL, LOCAL
+                                                    * (smk_daw.h) */
+       MI_DMAP, MI_KREL, MI_DEDIT, MI_DRESET,      /* SMK-37: DAW > CC MAP, KNOBS, EDIT MAP, RESET MAP (ui_daw.c) */
 #endif
        MI_PANEL, MI_LCLEAR, MI_ABOUT, MI_COUNT };
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "ZOOM",
@@ -24,15 +27,16 @@ static const char *const MI_NAME[MI_COUNT] = {"COLOR", "ZOOM",
 #endif
                                               "LIGHTS", "KEYS", "NOTES", "SPEAKER LOWCUT", "USB AUDIO", "USB SERIAL",
 #if BOARD_SMK37
-                                              "LIMITER", "TRS MIDI OUT", "BEND UP", "BEND DOWN", "KEY VELOCITY",
+                                              "LIMITER", "KEY VELOCITY", "BEND UP", "BEND DOWN", "TRS MIDI OUT", "MODE",
+                                              "CHANNEL", "LOCAL", "CC MAP", "KNOBS", "EDIT MAP", "RESET MAP",
 #endif
                                               "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT"};
 #define MI_SYS0 MI_PANEL
 #if BOARD_SMK37
-enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_MIDI, MS_SYSTEM, MS_COUNT };
-static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "MIDI", "SYSTEM"};
-static const uint8_t MS_FIRST[MS_COUNT + 1] = {MI_COLOR, MI_LIGHTS, MI_LOWCUT, MI_TRS, MI_SYS0, MI_COUNT};
-#define MS_GAP 4                                   /* (five tabs across the screen) */
+enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_PLAY, MS_MIDI, MS_DAW, MS_SYSTEM, MS_COUNT };
+static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "PLAY", "MIDI", "DAW", "SYSTEM"};
+static const uint8_t MS_FIRST[MS_COUNT + 1] = {MI_COLOR, MI_LIGHTS, MI_LOWCUT, MI_VEL, MI_TRS, MI_DMAP, MI_SYS0, MI_COUNT};
+#define MS_GAP 10                                  /* (seven tabs: those around this one that fit, menu_tabs) */
 #else
 enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_SYSTEM, MS_COUNT };
 static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "SYSTEM"};   /* (AUDIO: and USB) */
@@ -42,6 +46,9 @@ static const uint8_t MS_FIRST[MS_COUNT + 1] = {MI_COLOR, MI_LIGHTS, MI_LOWCUT, M
 static const char *const LIGHTS_NAME[LIGHTS_N] = {"OFF", "LOW", "MID", "HIGH"};   /* every button lit, the labels readable */
 static const char *const KEYS_NAME[KEYS_N] = {"OFF", "C KEYS", "WHITE KEYS", "ALL KEYS"};      /* keys lit too, at the LIGHTS level */
 #define MI_Y0 26                                   /* the first row, under the section tabs */
+#if BOARD_SMK37
+#define MI_ARM_RESET 0xD5u                         /* ui.arm: RESET MAP armed (OCT+ again; ui_daw.c the rest) */
+#endif
 #define MI_DY 50                                   /* a row: the label, the value in large type */
 
 static uint32_t mi_sec(uint32_t i)                 /* the section of item i */
@@ -77,6 +84,32 @@ static const char *mi_value(uint32_t i, uint16_t *c)
         }
         return trs_out ? "ON" : "OFF";
     case MI_KLAY: return knob_layout ? "SMK" : "FM-1";
+    case MI_MODE: return daw_on ? "DAW" : "SYNTH";
+    case MI_DCH: {
+        static char b[4];
+        fmt_int(b, daw_ch);
+        return b;
+    }
+    case MI_LOCAL:
+        *c = daw_on ? C_HI : C_DIM;                   /* (DAW mode only) */
+        return daw_local ? "ON" : "OFF";
+    case MI_DMAP: return daw_user ? "USER" : "DEFAULT";
+    case MI_KREL: return daw_rel ? "RELATIVE" : "ABSOLUTE";
+    case MI_DRESET: {                                 /* the USER map's entries not as DEFAULT; OCT+ twice resets it */
+        static char b[16];
+        uint32_t n = daw_user_changed();
+        if (ui.arm == MI_ARM_RESET && ui.arm_t) {
+            *c = C_AMB;
+            return "OCT+ AGAIN";
+        }
+        if (!n) {
+            *c = C_DIM;
+            return "NONE CHANGED";
+        }
+        fmt_int(b, (int32_t)n);
+        str_cpy(b + str_len(b), " CHANGED", 9);
+        return b;
+    }
     case MI_LIMIT: return lim_classic ? "CLASSIC" : "SOFT";
     case MI_BUP:
     case MI_BDN: {                                    /* semitones of the pitch wheel up / down, the internal sounds */
@@ -117,6 +150,8 @@ static void draw_menu(void)
 #if BOARD_SMK37
     sig += vel_mode * 179424673u + trs_out * 373587883u + smo.dead * 573259391u + bend_up * 817504243u +
            bend_dn * 941083987u + lim_classic * 1500450271u + knob_layout * 2147483647u;
+    sig += daw_on * 1000003u + daw_ch * 2000029u + daw_local * 3000017u + daw_user * 4000037u + daw_rel * 5000011u +
+           daw_user_changed() * 6000047u + (ui.arm == MI_ARM_RESET && ui.arm_t) * 7000003u;
 #endif
     if (!ui.force && sig == ui.menu_sig)
         return;
@@ -162,7 +197,28 @@ static void draw_menu(void)
             cv_text(4, 198, &FONT_S, "VOICE: REF. KLATTSCH (MIT)", C_DIM);
         } else {
             int32_t x = 4;
+#if BOARD_SMK37
+            uint32_t a = sec, z = sec;              /* the tabs around this one that fit (232 px): < > where there are more */
+            int32_t tw = text_w(&FONT_S, MS_NAME[sec]);
+            for (;;) {
+                int32_t wr = z + 1u < MS_COUNT ? text_w(&FONT_S, MS_NAME[z + 1u]) + MS_GAP : 999;
+                int32_t wl = a > 0u ? text_w(&FONT_S, MS_NAME[a - 1u]) + MS_GAP : 999;
+                if (tw + wr <= 208)
+                    tw += wr, z++;
+                else if (tw + wl <= 208)
+                    tw += wl, a--;
+                else
+                    break;
+            }
+            x = 120 - tw / 2;
+            if (a > 0u)
+                cv_text(2, 4, &FONT_S, "<", C_DIM);
+            if (z + 1u < MS_COUNT)
+                cv_text(230, 4, &FONT_S, ">", C_DIM);
+            for (i = a; i <= z; i++) {
+#else
             for (i = 0; i < MS_COUNT; i++) {        /* the sections as tabs: this one lit */
+#endif
                 int32_t w = text_w(&FONT_S, MS_NAME[i]);
                 if (i == sec)
                     cv_rect(x - 2, 3, w + 4, 18, C_LINE);
@@ -276,6 +332,38 @@ static void mi_set(uint32_t i, int32_t s)
         knob_layout = (uint8_t)(s > 0 ? 1u : s < 0 ? 0u : !knob_layout);
         knob_layout_apply();
         ui.force = 1;
+        break;
+    case MI_MODE:                                      /* right DAW, left SYNTH; OCT+ toggles (the menu stays up) */
+        daw_set(s > 0 ? 1u : s < 0 ? 0u : !daw_on, 0);
+        break;
+    case MI_DCH:                                       /* 1..16 (stops at the ends); OCT+ steps round */
+        daw_ch = (uint8_t)(s > 0 ? (daw_ch < 16u ? daw_ch + 1u : 16u) : s < 0 ? (daw_ch > 1u ? daw_ch - 1u : 1u)
+                                 : daw_ch % 16u + 1u);
+        break;
+    case MI_LOCAL:                                     /* right ON, left OFF; OCT+ toggles */
+        daw_local = (uint8_t)(s > 0 ? 1u : s < 0 ? 0u : !daw_local);
+        break;
+    case MI_DMAP:                                      /* right USER, left DEFAULT; OCT+ toggles */
+        daw_user = (uint8_t)(s > 0 ? 1u : s < 0 ? 0u : !daw_user);
+        break;
+    case MI_KREL:                                      /* right RELATIVE, left ABSOLUTE; OCT+ toggles */
+        daw_rel = (uint8_t)(s > 0 ? 1u : s < 0 ? 0u : !daw_rel);
+        break;
+    case MI_DEDIT:                                     /* OCT+: the map editor (DAW mode, CC MAP USER) */
+        if (!s)
+            daw_edit_open();
+        break;
+    case MI_DRESET:                                    /* OCT+ arms, OCT+ again within ~1.5 s: USER = DEFAULT */
+        if (s)
+            break;
+        if (ui.arm != MI_ARM_RESET || !ui.arm_t) {
+            ui.arm = MI_ARM_RESET;
+            ui.arm_t = 90;
+        } else {
+            ui.arm = 0;
+            daw_reset_user();
+            ui_message("USER MAP RESET");
+        }
         break;
     case MI_VEL:                                       /* DYNAMIC .. FIXED 127 (stops at the ends); OCT+ steps round */
         if (s > 0 && vel_mode + 1u < VEL_N)

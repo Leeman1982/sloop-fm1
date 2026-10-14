@@ -256,6 +256,13 @@ static void ui_leds(void)
         led_pos_init();
         ready = 1;
     }
+#if BOARD_SMK37
+    if (daw_on) {                                  /* DAW mode: the buttons and pads as the map (ui_daw.c) */
+        daw_leds();
+        return;
+    }
+    smk_pad_daw = 0;
+#endif
     led_put(nl, panel.btn[ui.layer != LY_PLAY ? LAYER_BTN[ui.layer] : cur_btn()],
             ly_lock == LY_PLAY || ((fm1_ms / 300u) & 1u) != 0u || (fm1_in.buttons & ly_bit[ly_lock % LY_COUNT]) != 0u);   /* locked: blinks */
     led_put(nl, panel.btn[B_PLAY], play_led() || (song.playing && !song.rec && ft_on) ||
@@ -1089,6 +1096,11 @@ static void ui_input(void)
 {
     uint32_t pressed = fm1_input_edges(0), notes = fm1_input_note_edges(), now = fm1_ticks(), id, b, k;
 #if BOARD_SMK37
+    daw_switch(&pressed);                                         /* < + > together: SYNTH <-> DAW (ui_daw.c) */
+    if (daw_on) {                                                 /* DAW mode: every control sends MIDI */
+        daw_input(pressed, now);
+        return;
+    }
     if (pressed & (1u << SMK_BTN_LEFT | 1u << SMK_BTN_RIGHT)) {   /* < >: SEQ held: the step pages; the visualiser:
                                                                 * its style; else the pages, as SELECT (never the tempo) */
         int32_t d = (pressed >> SMK_BTN_RIGHT) & 1u ? 1 : -1;

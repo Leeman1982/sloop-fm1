@@ -638,6 +638,9 @@ static int ed_backup(uint32_t cmd, const uint8_t *a, uint32_t na)   /* no flash:
 
 #include "editor_fm6.c"                               /* v9: the FM6 patches (68..71) */
 #include "editor_dsyn.c"                              /* v10: the SYN drum kits (72..76) */
+#if BOARD_SMK37
+#include "editor_daw.c"                               /* SMK-37: DAW mode's settings and map (80, 81) */
+#endif
 
 static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0 and F7 */
 {
@@ -659,6 +662,12 @@ static void ed_handle(const uint8_t *f, uint32_t n)   /* f: the bytes between F0
         ed_send();
         return;
     }
+#if BOARD_SMK37
+    if (ed_daw_handle(cmd, a, na)) {                       /* SMK-37: DAW mode */
+        ed_send();
+        return;
+    }
+#endif
     switch (cmd) {
     case ED_INFO:
         ed_str("FELUCCA " FELUCCA_VERSION, 24);

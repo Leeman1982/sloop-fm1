@@ -111,6 +111,23 @@ pads_rec_menu() {
     sed -n '/^    if (ui.menu) {/,/^    }/p' firmware/src/ui_input.c | grep -q 'transport_req = song.playing ? 2 : 1;' && echo checked
 }
 run "SMK-37 pads: DRUM KIT hits recorded into the drum track; PLAY / REC work in the HOME menu" pads_rec_menu
+$CC -o "$OUT/smk_daw_test" tests/smk_daw_test.c
+run "SMK-37 DAW mode: the DEFAULT map, types, MIDI bytes (CC, notes, bend, MMC), knobs, toggles, rate, flash object" "$OUT/smk_daw_test"
+$CC -O2 -w -DSMK_MIX=1 -Ibuild/gen -Ifirmware/src -Ifirmware/hal -Itests -o "$OUT/daw_ui_test" tests/daw_ui_test.c -lm
+run "SMK-37 DAW mode on the UI: < + >, knobs / faders / buttons / wheels, banks, PATCH, the editor, the menu" "$OUT/daw_ui_test" "$OUT"
+# DAW mode, the audio context's part: the keys and pads go to seq.c daw_* (not the synth) while in DAW mode, the pads
+# whatever the layer (smk_input.h SMK_EXT_DAW), a release where its press went; the faders, the wheels, the volume knob
+# leave SLOOP alone; the store's own object (OBJ_DAW), saved with the settings
+daw_routed() {
+    sed -n '/^static void keyboard_block(void)/,/^}/p' firmware/src/seq.c | grep -q 'if (daw_isr) {' &&
+    sed -n '/^static void ext_keys_block(void)/,/^}/p' firmware/src/seq.c | grep -q 'daw_pad(k - SMK_EXT_DAW, v);' &&
+    sed -n '/^static void smk__padq(/,/^}/p' firmware/hal/smk_input.h | grep -q 'if (smk_pad_daw) {' &&
+    sed -n '/^static void smk_faders(void)/,/^}/p' firmware/src/main.c | grep -q 'if (daw_on) {' &&
+    sed -n '/^static void smk_wheels(void)/,/^}/p' firmware/src/main.c | grep -q 'daw_wheels(b, m);' &&
+    grep -q 'if (smk_master_hold)' firmware/hal/smk_input.h &&
+    sed -n '/^static void settings_save(void)/,/^}/p' firmware/src/project.c | grep -q 'daw_save();' && echo routed
+}
+run "SMK-37 DAW mode: keys, pads, faders, wheels and the volume knob routed; its settings kept" daw_routed
 # no divide by 0 (the FM-1 runs with the div0 trap off, hal/fm1_irq.h: a real one would give a wrong value
 # silently): the UI fuzz, the sequencer, the projects and a minute of random live use, with UBSan
 UBSAN="${CC_UB:-cc} -O1 -w -fsanitize=integer-divide-by-zero -fno-sanitize-recover=integer-divide-by-zero -Ibuild/gen -Ifirmware/src -Ifirmware/hal"

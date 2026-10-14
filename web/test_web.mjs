@@ -34,7 +34,7 @@ const E = vm.runInNewContext(proto + `
    CHOP, chopNovelty, chopHits, chopSnap, chopGrid, chopEqual, chopList, chopPick, chopFit, chopZones, wavFile, zipStore, crc32,
    UP, bank, capturePatch, auditionPatch, startWatch, libraryFile, readLibraryFile, paramKeys, patternFromSteps, stepsFromPattern, upName,
    mixer, GM_DRUM, drumName, parseNotes, fmtValue, F, DRUM_LANES, LV_NAMES, emptyDrum, lockable, MICRO, FC, fillGet, fillSet, pack7, unpack7,
-   loudDb, matchGains, withGain, LEVEL_MIN, backupCapture, backupRestore, backupObjects, b64enc, b64dec, FM6, KIT, kitPad, kitZones, kitLen, kitBytes, kitFit, kitSplit, kitLaneOf, kitPlace, zipRead, ROLL, SMF, ARR, mockSettings, fm6CartWrite, fm6CartPreset, fm6CartSlots, fm6CartPresets, DSYN, DSYN_MOCK_NAMES, DSYN_MOCK_KITS, SetGate, bkProjFormat, bkDevFormat, bkFwAtLeast, FM1_PORT_ED: FM1_PORT, fm1Ports })`,
+   loudDb, matchGains, withGain, LEVEL_MIN, backupCapture, backupRestore, backupObjects, b64enc, b64dec, FM6, KIT, kitPad, kitZones, kitLen, kitBytes, kitFit, kitSplit, kitLaneOf, kitPlace, zipRead, ROLL, SMF, ARR, mockSettings, fm6CartWrite, fm6CartPreset, fm6CartSlots, fm6CartPresets, DSYN, DSYN_MOCK_NAMES, DSYN_MOCK_KITS, DAW, SetGate, bkProjFormat, bkDevFormat, bkFwAtLeast, FM1_PORT_ED: FM1_PORT, fm1Ports })`,
 { setTimeout, clearTimeout, setInterval, clearInterval, console, TextEncoder, TextDecoder, Blob, Response, DecompressionStream });
 
 async function editorMock() {
@@ -1204,7 +1204,7 @@ function editorTabs() {
   const tabs = [...html.matchAll(/<button role="tab" data-tab="(\w+)"/g)].map((x) => x[1]);
   const panels = [...html.matchAll(/<section class="panel" id="p-(\w+)" data-tab="(\w+)"/g)].map((x) => [x[1], x[2]]);
   const TABS = JSON.parse((/const TABS = (\[[^\]]*\]);/.exec(html) || [])[1] || "[]");
-  ok(tabs.length === 10 && js(tabs) === js(TABS) && js(panels.map((x) => x[1])) === js(TABS) && panels.every(([a, b]) => a === b),
+  ok(tabs.length === 11 && js(tabs) === js(TABS) && js(panels.map((x) => x[1])) === js(TABS) && panels.every(([a, b]) => a === b),
     `editor: ${tabs.length} tabs, one panel each (${tabs.join(" ")})`);
   ok(/localStorage\.setItem\(TAB_KEY/.test(html) && /try \{ localStorage/.test(html) && /history\.replaceState\([^)]*"#" \+ name\)/.test(html)
     && /addEventListener\("hashchange"/.test(html), "editor: last tab in localStorage (try/catch) and in the URL hash");
@@ -1697,6 +1697,62 @@ async function portNames() {
   ok(pn(acc(["Arturia KeyStep Pro", "loopMIDI Port"])) === "", "editor: no FM-1 name: nothing to try");
 }
 
+/* ------------------------------------------ SMK-37: DAW mode's map (DAW_GET / DAW_PUT) --- */
+async function editorDaw() {
+  const { DAW } = E, C = E.CMD;
+  const dh = readFileSync(join(HERE, "../firmware/src/smk_daw.h"), "utf8"), dc = readFileSync(join(HERE, "../firmware/src/editor_daw.c"), "utf8");
+  const arr = (re) => ((re.exec(dh) || [, ""])[1]).split(",").map((x) => x.trim().replace(/^"|"$/g, ""));
+  ok(js(arr(/DAW_BTN_CC\[DAW_NBTN\] = \{([^}]*)\}/).map(Number)) === js([110, 111, 115, 117, 112, 113, 114, 118, 119, 85, 86, 87, 88])
+    && js(arr(/DAW_BTN_NAME\[DAW_NBTN\] = \{([^}]*)\}/)) === js(DAW.BTN) && js(arr(/DT_NAME\[DT_N\] = \{([^}]*)\}/)) === js(DAW.TYPE_NAMES)
+    && js(arr(/DAW_MMC_NAME\[DAW_MMC_N\] = \{([^}]*)\}/)) === js(DAW.MMC.map((x) => x || "")),
+    "daw: the buttons, their CCs, the types and MMC commands == smk_daw.h");
+  ok(/DAW_KNOB0 = 0, DAW_FADER0 = 16, DAW_PAD0 = 24, DAW_BTN0 = 56, DAW_PITCH = 69, DAW_MOD = 70, DAW_N = 71/.test(dh)
+    && DAW.N === 71 && DAW.PAD0 === 24 && DAW.BTN0 === 56 && /enum \{ ED_DAW_GET = 80, ED_DAW_PUT \};/.test(dc) && C.DAW_GET === 80 && C.DAW_PUT === 81,
+    "daw: the entries' order (71) and the commands (80, 81) == the firmware's");
+  const D = DAW.defaults();
+  ok(D[0].num === 70 && D[15].num === 109 && D[16].num === 20 && D[23].num === 27 && D[24 + 8].num === 36 && D[24 + 8].ch === 10
+    && D[24].num === 44 && D[56 + 2].num === 115 && D[69].type === DAW.T.BEND && D[70].num === 1 && D.every((e, i) => DAW.ok(i, e)),
+    "daw: the DEFAULT map as daw_default (K1 70, PAD 9 note 36 ch 10, SEQ PLAY 115, pitch bend, mod CC 1)");
+  ok(!DAW.ok(24, { type: DAW.T.MMC, num: 2, ch: 0 }) && DAW.ok(56, { type: DAW.T.MMC, num: 2, ch: 0 }) && !DAW.ok(0, { type: DAW.T.NOTE, num: 1, ch: 0 })
+    && !DAW.ok(0, { type: DAW.T.CC, num: 1, ch: 17 }) && DAW.label(24 + 16 + 11) === "PAD 12 B" && DAW.label(3) === "K4 A" && DAW.noteName(36) === "C2",
+    "daw: each control's types, ranges, names (K4 A, PAD 12 B), notes (36 = C2)");
+  /* the device (the mock as editor_daw.c): read, send, a bad entry, the settings alone */
+  {
+    const { rq, done } = attachMock({ daw: true });
+    const r0 = E.parse[C.DAW_GET](await rq(E.req.dawGet(1)));
+    const d0 = E.parse[C.DAW_GET](await rq(E.req.dawGet(0)));
+    ok(r0.which === 1 && d0.which === 0 && r0.on === 0 && r0.ch === 1 && js(r0.map) === js(D) && js(d0.map) === js(D),
+      "daw: mock: DAW_GET, the USER and the DEFAULT map (a new device: the same)");
+    const map = DAW.defaults();
+    DAW.setType(24 + 3, map[27], DAW.T.TOG); map[27].num = 80;
+    DAW.setType(56 + 2, map[58], DAW.T.MMC);
+    map[0].ch = 5;
+    const bad = DAW.putArgs({ on: 1, ch: 7, local: 1, user: 1, rel: 1 }, map);
+    bad[6 + 3 * 1] = 4;                                  /* K2 as MMC: not a knob's */
+    const r1 = E.parse[C.DAW_PUT](await rq([C.DAW_PUT, bad]));
+    ok(r1.which === 1 && r1.on === 1 && r1.ch === 7 && r1.local === 1 && r1.user === 1 && r1.rel === 1 && r1.map[27].type === DAW.T.TOG
+      && r1.map[27].num === 80 && r1.map[58].type === DAW.T.MMC && r1.map[58].num === 2 && r1.map[0].ch === 5 && DAW.same(r1.map[1], D[1]),
+      "daw: mock: DAW_PUT the settings and the map; a bad entry comes back as its default");
+    const r2 = E.parse[C.DAW_PUT](await rq(E.req.dawPut({ on: 0, ch: 3, local: 0, user: 0, rel: 0 })));
+    ok(r2.on === 0 && r2.ch === 3 && r2.map[27].type === DAW.T.TOG && DAW.changed(r2.map) === 3, "daw: the settings alone: the map stays");
+    done();
+    const f = DAW.fromFile(JSON.parse(JSON.stringify(DAW.toFile({ ch: 4, rel: 1 }, r1.map))));
+    ok(js(f.map) === js(r1.map) && f.ch === 4 && f.rel === 1, "daw: a map file reads back (by the controls' names)");
+    let thrown = false;
+    try { DAW.fromFile({ format: "x" }); } catch (e) { thrown = true; }
+    ok(thrown, "daw: another file: refused");
+  }
+  {
+    const { rq, done } = attachMock({});              /* an FM-1: no DAW mode */
+    let err = "";
+    try { await rq(E.req.dawGet(1), { timeout: 200, retries: 0, quiet: true }); } catch (e) { err = e.message; }
+    ok(/^timeout/.test(err), "daw: a device without DAW mode: no reply (the tab stays hidden)");
+    done();
+  }
+  ok(/if \(b\.dataset\.tab === "daw"\) b\.hidden = !\(dev && dev\.daw\);/.test(html) && /req\.dawGet\(1\), \{ timeout: 300, retries: 0, quiet: true \}/.test(html),
+    "daw: the DAW MAP tab only for a device that answers DAW_GET");
+}
+
 await editorMock();
 await editorLibrarian();
 await editorLive();
@@ -1716,6 +1772,7 @@ editorTabs();
 editorIcons();
 samplesMatch();
 chopTests();
+await editorDaw();
 await packages();
 await updater();
 await stockReturn();

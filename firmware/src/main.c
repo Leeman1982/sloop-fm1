@@ -84,6 +84,10 @@ static void smk_faders(void)
 {
     static uint8_t last[4] = {0xFF, 0xFF, 0xFF, 0xFF};
     uint32_t i;
+    if (daw_on) {                                         /* DAW mode: the faders send MIDI (ui_daw.c); back from it */
+        smk_fbank_new = 1;                                /* each waits to move again */
+        return;
+    }
     if (smk_fbank_new) {                                  /* a new bank: wait for each fader to move */
         smk_fbank_new = 0;
         for (i = 0; i < 4u; i++)
@@ -136,6 +140,14 @@ static void smk_wheels(void)
         pw = zp;
         mw = zm;
         gen = wcal_gen;
+    }
+    if (daw_on) {                                 /* DAW mode: pitch bend +-8192 and the mod wheel to MIDI (ui_daw.c); the
+                                                   * internal sounds bend (BEND UP / DOWN) with LOCAL ON only */
+        int32_t b = smk_pw_bend(&pw, &wcal, fm1_in.wheel[0], fm1_ms, 2, 2), m = smk_mw_val(&mw, &wcal, fm1_in.wheel[1]);
+        daw_wheels(b, m);
+        perf_bend = daw_local ? (b > 0 ? b * (int32_t)bend_up : b * (int32_t)bend_dn) / 2 : 0;
+        perf_modw = daw_local ? m : 0;
+        return;
     }
     perf_bend = smk_pw_bend(&pw, &wcal, fm1_in.wheel[0], fm1_ms, bend_up, bend_dn);
     perf_modw = smk_mw_val(&mw, &wcal, fm1_in.wheel[1]);

@@ -112,6 +112,10 @@ static volatile uint8_t smk_pad_grid;    /* the pads are a 1..16 grid (steps, ti
 static volatile uint8_t smk_pad_drums, smk_pad_steps;
 #define SMK_EXT_PAD 0x40u
 #define SMK_EXT_STEP 0x50u
+/* DAW mode (the UI sets smk_pad_daw): every pad, whatever the layer, goes to the outer-key queue as SMK_EXT_DAW + the
+ * hardware pad (seq.c daw_pad); its release too, whatever the mode is by then */
+static volatile uint8_t smk_pad_daw;
+#define SMK_EXT_DAW 0x60u
 #define SMK_WHITE_OF_PAD(p) ((p) < 8u ? (p) + 8u : (p) - 8u)
 #define SMK_PAD_OF_KEY(w) (smk_pad_grid ? (w) : SMK_PAD_OF_WHITE(w))   /* white key -> pad, as the pads are now */
 
@@ -450,6 +454,11 @@ static void smk__padq(uint32_t pad, uint32_t vel)     /* a pad hit (vel) or rele
     int32_t n0 = smk_pad_piano ? SMK_PIANO_NOTE[pad] : (int32_t)SMK_WHITE_NOTE[smk_pad_grid ? pad : SMK_WHITE_OF_PAD(pad)];
     uint32_t n, bit;
     if (vel) {
+        if (smk_pad_daw) {                            /* DAW mode: the pad itself */
+            smk_pad_note[pad] = (uint8_t)(SMK_EXT_DAW + pad);
+            smk__extq(SMK_EXT_DAW + pad, vel);
+            return;
+        }
         if ((smk_pad_pick >> pad) & 1u) {
             smk_pick_hits |= (uint16_t)(1u << pad);
             return;
@@ -466,7 +475,7 @@ static void smk__padq(uint32_t pad, uint32_t vel)     /* a pad hit (vel) or rele
     } else {
         if (!smk_pad_note[pad])
             return;
-        if (smk_pad_note[pad] & SMK_EXT_PAD) {         /* (DRUM KIT / STEPS: its release goes there too, whatever now) */
+        if (smk_pad_note[pad] & SMK_EXT_PAD) {         /* (DRUM KIT / STEPS / DAW: its release goes there too, whatever now) */
             smk__extq(smk_pad_note[pad], 0);
             smk_pad_note[pad] = 0;
             return;
@@ -690,6 +699,7 @@ enum { FM1_ADC_BATT = 3, FM1_ADC_MASTER = 4 };
 static int32_t smk_master = 724;
 static uint8_t smk_master_enc = SMK_ENC_MASTER;   /* the knob that turns it (panel.c knob_layout_apply: K1, or K5) */
 static int8_t smk_master_dir = 1;
+static uint8_t smk_master_hold;    /* DAW mode: the knob sends MIDI, the volume stays (ui_daw.c reads every knob) */
 static void fm1_adc_init(void) {}
 static int32_t fm1_enc_take(uint32_t e);
 static int32_t fm1_adc_read(uint32_t ch)
@@ -697,6 +707,8 @@ static int32_t fm1_adc_read(uint32_t ch)
     if (ch == FM1_ADC_BATT)
         return fm1_in.batt ? (int32_t)fm1_in.batt : -1;
     if (ch == FM1_ADC_MASTER) {
+        if (smk_master_hold)
+            return smk_master;
         smk_master += fm1_enc_take(smk_master_enc % FM1_NENC) * smk_master_dir * 24;
         smk_master = smk_master < 0 ? 0 : smk_master > 1023 ? 1023 : smk_master;
         return smk_master;

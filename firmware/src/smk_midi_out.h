@@ -73,6 +73,23 @@ static void smo_put(uint32_t pkt)                      /* producer: one packet, 
     smo.w = w + n;
 }
 
+/* producer: a whole message of n bytes as it is (DAW mode's MMC, F0 7F 7F 06 cmd F7: smo_put takes no SysEx), whole or
+ * dropped */
+static void smo_raw(const uint8_t *b, uint32_t n)
+{
+    uint32_t w = smo.w, i;
+    if (!trs_out || smo.dead || !n)
+        return;
+    if (SMO_RING - (w - smo.r) < n) {
+        smo.drops++;
+        return;
+    }
+    for (i = 0; i < n; i++)
+        smo.ring[(w + i) % SMO_RING] = b[i];
+    SMO_PUBLISH();
+    smo.w = w + n;
+}
+
 static void smo_tick(void)                             /* the TIMER5 tick: at most one byte, never waits */
 {
     if (smo.wait) {                                    /* a byte in flight */

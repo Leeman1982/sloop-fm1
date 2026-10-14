@@ -93,7 +93,14 @@ static void settings_save(void) {}
 #include "../firmware/src/ui_draw.c"
 #include "../firmware/src/ui_vis.c"
 #include "../firmware/src/ui_layers.c"
+#ifdef UI_MENU_SMK                                  /* (tests/daw_ui_test.c: the SMK-37 HOME menu, its stand-ins) */
+#include UI_MENU_SMK
+#define BOARD_SMK37 1
+#endif
 #include "../firmware/src/ui_menu.c"
+#ifdef UI_MENU_SMK
+#undef BOARD_SMK37
+#endif
 #include "../firmware/src/ui_input.c"
 #include "../firmware/src/splash.c"
 static const char *outdir;
