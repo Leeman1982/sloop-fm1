@@ -1707,7 +1707,7 @@ async function editorDaw() {
     && js(arr(/DAW_MMC_NAME\[DAW_MMC_N\] = \{([^}]*)\}/)) === js(DAW.MMC.map((x) => x || "")),
     "daw: the buttons, their CCs, the types and MMC commands == smk_daw.h");
   ok(/DAW_KNOB0 = 0, DAW_FADER0 = 16, DAW_PAD0 = 24, DAW_BTN0 = 56, DAW_PITCH = 69, DAW_MOD = 70, DAW_N = 71/.test(dh)
-    && DAW.N === 71 && DAW.PAD0 === 24 && DAW.BTN0 === 56 && /enum \{ ED_DAW_GET = 80, ED_DAW_PUT \};/.test(dc) && C.DAW_GET === 80 && C.DAW_PUT === 81,
+    && DAW.N === 71 && DAW.PAD0 === 24 && DAW.BTN0 === 56 && /enum \{ ED_DAW_GET = 80, ED_DAW_PUT, ED_STOCK_RELEASE \};/.test(dc) && C.DAW_GET === 80 && C.DAW_PUT === 81,
     "daw: the entries' order (71) and the commands (80, 81) == the firmware's");
   const D = DAW.defaults();
   ok(D[0].num === 70 && D[15].num === 109 && D[16].num === 20 && D[23].num === 27 && D[24 + 8].num === 36 && D[24 + 8].ch === 10
@@ -1733,6 +1733,9 @@ async function editorDaw() {
     ok(r1.which === 1 && r1.on === 1 && r1.ch === 7 && r1.local === 1 && r1.user === 1 && r1.rel === 1 && r1.map[27].type === DAW.T.TOG
       && r1.map[27].num === 80 && r1.map[58].type === DAW.T.MMC && r1.map[58].num === 2 && r1.map[0].ch === 5 && DAW.same(r1.map[1], D[1]),
       "daw: mock: DAW_PUT the settings and the map; a bad entry comes back as its default");
+    const s1 = E.parse[C.STOCK_RELEASE](await rq(E.req.stockRelease())), s2 = E.parse[C.STOCK_RELEASE](await rq(E.req.stockRelease()));
+    ok(s1.rc === 0 && s2.rc === 1 && C.STOCK_RELEASE === 82 && /ED_STOCK_RELEASE \};/.test(dc),
+      "daw: mock: STOCK_RELEASE (82): the stock marker erased (rc 0), then none (rc 1)");
     const r2 = E.parse[C.DAW_PUT](await rq(E.req.dawPut({ on: 0, ch: 3, local: 0, user: 0, rel: 0 })));
     ok(r2.on === 0 && r2.ch === 3 && r2.map[27].type === DAW.T.TOG && DAW.changed(r2.map) === 3, "daw: the settings alone: the map stays");
     done();

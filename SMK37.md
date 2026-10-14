@@ -39,6 +39,12 @@ Until this project's releases include SMK-37 packages, unofficial builds can be 
 **Back to the stock firmware:** install the official package for your model with M-Vave's own updater (M-UPGRADE),
 or give it to the installer: `python3 tools/fm1_install.py --force SMK-37_Pro_016.fwsc` (the installer reads the
 stock package format). The SLOOP build keeps the stock update protocol, so the stock tools see the keyboard as usual.
+The user sample slots USR1 / USR2 (0xC2000–0xE9FFF) are where the stock firmware keeps its key, knob and fader
+mapping; it trusts that area while its end marker `usrdata` (0xEAFF8) is there. SLOOP erases the marker's sector
+(0xEA000, the only sector it may touch there) before it first stores a sample in USRFLASH, and at power-on when the
+marker sits over sample data, so the stock firmware rebuilds its factory mapping; an untouched stock mapping (with
+your MIDI Suite presets) stays as it is. The web editor's Settings tab has **Prepare the return to M-Vave** to erase
+the marker on request.
 
 **If it does not start:** after two failed starts SLOOP opens its USB recovery screen (identity `SMK-37 Pro_000`,
 or the model's), where the installer can write a package again; after a third it drops into the chip's mask-ROM

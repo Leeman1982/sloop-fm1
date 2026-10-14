@@ -6,8 +6,10 @@
  *                           channel): which 0 the DEFAULT map, 1 the USER map (no byte: 1)
  *   81 DAW_PUT MODE, CHANNEL, LOCAL, CC MAP, KNOBS [, N, N x (type, number, channel)] -> as DAW_GET 1, after it.
  *                           A setting out of range stays as it was; an entry out of range becomes its default; entries
- *                           past N stay. Kept in flash with the settings, once the device is quiet (no flash write here) */
-enum { ED_DAW_GET = 80, ED_DAW_PUT };
+ *                           past N stay. Kept in flash with the settings, once the device is quiet (no flash write here)
+ *   82 STOCK_RELEASE        -> rc: 0 the stock firmware's marker erased (back on the M-Vave firmware it rebuilds its
+ *                           factory key / knob / fader mapping), 1 there was none, 3 stop the song first (storage.c) */
+enum { ED_DAW_GET = 80, ED_DAW_PUT, ED_STOCK_RELEASE };
 
 static void ed_daw_reply(uint32_t which)
 {
@@ -31,6 +33,14 @@ static void ed_daw_reply(uint32_t which)
 static int ed_daw_handle(uint32_t cmd, const uint8_t *a, uint32_t na)   /* 1: one of these (reply built) */
 {
     uint32_t i, n;
+    if (cmd == ED_STOCK_RELEASE) {
+#if FELUCCA_FLASH
+        ed_b(song.playing || transport_req ? 3u : !flash_ok ? 1u : st_stock_release() ? 0u : 1u);
+#else
+        ed_b(1);
+#endif
+        return 1;
+    }
     if (cmd == ED_DAW_GET) {
         ed_daw_reply(na >= 1u ? a[0] != 0u : 1u);
         return 1;

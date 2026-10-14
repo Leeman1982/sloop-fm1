@@ -436,6 +436,7 @@ DAW MAP tab only for a device that answers `DAW_GET`). `INFO`'s protocol version
 | --- | --- | --- |
 | 80 DAW_GET | [which] (0 the DEFAULT map, 1 the USER map; none: 1) | which, 1 (the format), MODE (0 SYNTH, 1 DAW), CHANNEL (1..16), LOCAL (0/1), CC MAP (0 DEFAULT, 1 USER), KNOBS (0 ABSOLUTE, 1 RELATIVE), N (71), N × (type, number, channel) |
 | 81 DAW_PUT | MODE, CHANNEL, LOCAL, CC MAP, KNOBS [, N, N × (type, number, channel)] | as DAW_GET 1, after it |
+| 82 STOCK_RELEASE | — | rc: 0 the stock firmware's end marker (`usrdata` at 0xEAFF8, the sector 0xEA000) erased: back on the M-Vave firmware it rebuilds its factory key / knob / fader mapping; 1 there was none; 3 stop the song first |
 
 The entries, in order: the 8 knobs K1..K8 of bank A, then bank B; the 4 faders of bank A, then B; the 16 pads of bank
 A, then B (PAD 1..8 the top row, 9..16 the bottom row); the buttons `<` `>` SEQ PLAY, SEQ REC, SEQ, FX, PARA, ARP, NOTE

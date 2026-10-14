@@ -863,6 +863,11 @@
         <h2 data-t="system" data-ic="symbol_cog"></h2>
         <table id="sysinfo"></table>
       </div>
+      <div class="card" id="stockcard" hidden>
+        <h2 data-t="stockTitle"></h2>
+        <p class="dim" data-t="stockHelp"></p>
+        <p class="bar"><button type="button" id="stockrel" data-t="stockBtn"></button></p>
+      </div>
     </section>
 
     <section class="panel" id="p-daw" data-tab="daw" data-dev hidden>
@@ -917,7 +922,7 @@ const CMD = { INFO: 1, GET: 2, SET: 3, DUMP: 4, DESC: 5, STEP_GET: 6, STEP_SET: 
   FILL_GET: 41, FILL_SET: 42,                         /* v8 (SLOOP 2.4): the steps' fill conditions */
   FM6_GET: 68, FM6_PUT: 69, FM6_LIST: 70, FM6_ERASE: 71,    /* v9 (SLOOP 2.4): the FM6 engine's patches (Felucca 1.0's numbers) */
   DSYN_LIST: 72, DSYN_GET: 73, DSYN_PUT: 74, DSYN_STORE: 75, DSYN_PLAY: 76,   /* v10 (SLOOP 2.5): the SYN drum kits */
-  DAW_GET: 80, DAW_PUT: 81 };                         /* SMK-37: DAW mode's settings and map (no reply: not this device) */
+  DAW_GET: 80, DAW_PUT: 81, STOCK_RELEASE: 82 };                         /* SMK-37: DAW mode's settings and map (no reply: not this device) */
 /* v7: the parameters a step can lock (firmware seq.c p_lockable: the sound, not the sequencer / arp / key / voice
    mode); ids as core.h: LEVEL .. LFO dests, GATE, the sends, GLIDE, PAN, DETUNE, the SLICER, FILTER, the engine's 8;
    from 2.6 (pe0 63) also the INSERT's A B C and MIX (54..57). pe0: the device's (the newest when none) */
@@ -1222,6 +1227,7 @@ const parse = {
   [CMD.DSYN_PLAY](a) { return { k: a[0], lane: a[1], rc: a[2] }; },
   [CMD.DAW_GET](a) { return DAW.parseReply(a); },
   [CMD.DAW_PUT](a) { return DAW.parseReply(a); },
+  [CMD.STOCK_RELEASE](a) { return { rc: a[0] }; },
 };
 
 /* a name the device accepts: printable ASCII, 1..12 characters */
@@ -1307,6 +1313,8 @@ const req = {
   /* SMK-37: DAW mode. which 0 the DEFAULT map, 1 the USER map; put: the settings, and the USER map with map */
   dawGet: (which = 1) => [CMD.DAW_GET, [which ? 1 : 0]],
   dawPut: (st, map = null) => [CMD.DAW_PUT, DAW.putArgs(st, map)],
+  /* SMK-37: erase the stock firmware's marker (it rebuilds its factory mapping); rc 0 done, 1 none, 3 playing */
+  stockRelease: () => [CMD.STOCK_RELEASE, []],
 };
 
 /* which reply belongs to which request (the device echoes these) */
@@ -2695,6 +2703,7 @@ function makeMockDevice(opt = {}) {
     dsyn: null, dsynStored: null, dsynPlayed: [],  /* v10: the SYN kits (RAM, flash), the auditions heard */
     ml: null,                                       /* 2.6: the MIDI LEARN map (seq.c ml_tab, 16 x 2 bytes), null: none */
     daw: { on: 0, ch: 1, local: 0, user: 0, rel: 0, map: DAW.defaults() },   /* SMK-37 (opt.daw): DAW mode */
+    stockTag: true,                                 /* SMK-37: the stock firmware's marker still there */
     bkSnap: null, bkPut: null,
     watch: false, v4: false, lastReq: 0, playing: false,
   };
@@ -3224,6 +3233,11 @@ function makeMockDevice(opt = {}) {
         (w ? D.map : DAW.defaults()).forEach((e) => { b(e.type); b(e.num); b(e.ch); });
         break;
       }
+      case CMD.STOCK_RELEASE:                           /* editor_daw.c (SMK-37 only) */
+        if (!opt.daw) return null;
+        b(st.playing ? 3 : st.stockTag ? 0 : 1);
+        if (!st.playing) st.stockTag = false;
+        break;
       case CMD.SMP_INFO:
         b(st.smp.length); b(SMP.SLOT_SIZE / 1024);
         st.smp.forEach((u) => { b(u.zones); s(u.zones ? u.name : ""); b(u.zones ? Math.ceil(u.len / 1024) : 0); });
@@ -4079,6 +4093,10 @@ const TEXT = {
     smpFull: "1 スロット 16 ファイルまで",
     chopSendBelow: "送信は下の 3 で。",
     /* SLOOP 2.5: DRUM SYNTH */
+    stockTitle: "M-Vave のファームウェアに戻る準備",
+    stockHelp: "サンプルスロット USR1 / USR2 は M-Vave ファームウェアの鍵盤・ノブ・フェーダーの設定と同じ場所を使います。ここを押すと（またはサンプルを初めて保存したとき）その設定の目印を消し、M-Vave ファームウェアに戻したときに工場出荷時のマッピングが作り直されます（MIDI Suite で作ったプリセットは消えます）。",
+    stockBtn: "M-Vave に戻る準備をする", stockDone: "準備しました: M-Vave ファームウェアは工場出荷時のマッピングで起動します",
+    stockNone: "準備は済んでいます（目印はありません）", stockBusy: "ソングを止めてから",
     tabDaw: "DAW マップ", dawTitle: "DAW モード（SMK-37）",
     dawHelp: "DAW モードでは鍵盤が MIDI コントローラーになります（本体: < と > を同時に押す、または HOME メニュー > MIDI > MODE）。ここでノブ・フェーダー・パッド・ボタン・ホイールが送る CC / ノート / MMC とチャンネルを決め、「本体に送る」で USER マップとして使います（本体が静かなときにフラッシュに保存）。MAIN = 本体の CHANNEL。",
     dawSend: "本体に送る", dawRead: "本体から読む", dawDefault: "DEFAULT に戻す", dawSave: "ファイルに保存", dawOpen: "ファイルを開く",
@@ -4292,6 +4310,10 @@ const TEXT = {
     smpFull: "A slot takes 16 files at most",
     chopSendBelow: "Sending: step 3 below.",
     /* SLOOP 2.5: DRUM SYNTH */
+    stockTitle: "Going back to the M-Vave firmware",
+    stockHelp: "The sample slots USR1 / USR2 use the place where the M-Vave firmware keeps its key, knob and fader mapping. This button (as the first sample stored there) erases that mapping's marker, so the M-Vave firmware rebuilds its factory mapping when you go back to it (presets made with MIDI Suite are gone then).",
+    stockBtn: "Prepare the return to M-Vave", stockDone: "Done: the M-Vave firmware will start with its factory mapping",
+    stockNone: "Already prepared (no marker)", stockBusy: "Stop the song first",
     tabDaw: "DAW map", dawTitle: "DAW mode (SMK-37)",
     dawHelp: "In DAW mode the keyboard is a MIDI controller (on the keyboard: < and > together, or HOME menu > MIDI > MODE). Set here what the knobs, faders, pads, buttons and wheels send (CC, note or MMC, and the channel); Send to the keyboard makes it the USER map (kept in flash once the keyboard is quiet). MAIN = the keyboard's CHANNEL.",
     dawSend: "Send to the keyboard", dawRead: "Read from the keyboard", dawDefault: "Back to DEFAULT", dawSave: "Save to a file", dawOpen: "Open a file",
@@ -4400,6 +4422,7 @@ function renderPanels() {
     if (b.dataset.tab === "tracks") b.hidden = !tracksOk;
     if (b.dataset.tab === "daw") b.hidden = !(dev && dev.daw);   /* (SMK-37: a device that answers DAW_GET) */
   }
+  $("stockcard").hidden = !(dev && dev.daw);           /* (SMK-37: the way back to the M-Vave firmware) */
   const ready = !!dev && !!dev.dump;
   let hint = "";
   for (const p of document.querySelectorAll(".panel")) {
@@ -6233,6 +6256,10 @@ function renderDaw() {
     groups.get(k).append(row);
   }
 }
+$("stockrel").addEventListener("click", () => op(async () => {
+  const r = parse[CMD.STOCK_RELEASE](await rq(req.stockRelease(), { timeout: 1500, retries: 0 }));
+  sayK(r.rc === 0 ? "stockDone" : r.rc === 3 ? "stockBusy" : "stockNone");
+}));
 $("dawsend").addEventListener("click", () => op(async () => {
   if (!DW.map) return;
   await dawPut({ ...dawSettings(), user: 1 }, DW.map);

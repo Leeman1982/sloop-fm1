@@ -128,6 +128,15 @@ daw_routed() {
     sed -n '/^static void settings_save(void)/,/^}/p' firmware/src/project.c | grep -q 'daw_save();' && echo routed
 }
 run "SMK-37 DAW mode: keys, pads, faders, wheels and the volume knob routed; its settings kept" daw_routed
+# the stock firmware's mapping in USRFLASH: its end marker erased before the first erase there, at boot over our data
+$CC -DBOARD_SMK37=1 -Ifirmware/hal -o "$OUT/smk_stock_test" tests/smk_stock_test.c
+run "SMK-37 the way back to M-Vave: the stock mapping's marker released before the first USRFLASH erase, once" "$OUT/smk_stock_test"
+stock_hooked() {
+    sed -n '/^static int fl_erase4k_quiet(/,/^}/p' firmware/src/felucca.c | grep -q 'st_stock_touch(off);' &&
+    sed -n '/^static void persist_boot(void)/,/^}/p' firmware/src/project.c | grep -q 'st_stock_boot();' &&
+    [ "$(cat firmware/src/*.c | grep -c 'fl_erase4k_ram\|fl_erase4k(')" = 1 ] && echo hooked
+}
+run "SMK-37 every app erase goes through the stock marker's hook; the boot check runs" stock_hooked
 # no divide by 0 (the FM-1 runs with the div0 trap off, hal/fm1_irq.h: a real one would give a wrong value
 # silently): the UI fuzz, the sequencer, the projects and a minute of random live use, with UBSan
 UBSAN="${CC_UB:-cc} -O1 -w -fsanitize=integer-divide-by-zero -fno-sanitize-recover=integer-divide-by-zero -Ibuild/gen -Ifirmware/src -Ifirmware/hal"
