@@ -136,7 +136,11 @@ static void draw_menu(void)
                 int cur = i == ui.menu_sel;
                 uint16_t vc;
                 const char *v = mi_value(i, &vc);
+#if BOARD_SMK37
+                char k[4] = {'K', (char)('5' + r), 0, 0};   /* (the SMK-37's K5..K8 are KNOB 1..4) */
+#else
                 char k[4] = {'K', (char)('1' + r), 0, 0};
+#endif
                 cv_rect(4, y + 2, 4, MI_DY - 8, cur ? C_WHITE : TE_COL[r & 3u]);   /* the knob's colour */
                 xv = cv_text(14, y, &FONT_S, k, TE_COL[r & 3u]);
                 cv_text(xv + 6, y, &FONT_S, MI_NAME[i], cur ? C_WHITE : C_GRAY);

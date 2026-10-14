@@ -73,7 +73,7 @@ update mode (UBOOT).
 | FX | effect pages | punch-in FX on pads | FX | FX |
 | SEL | key / chord pages | key layer (pads = piano: scale green, root brighter) | SCALE | SEL |
 | EDIT | sound pages, drum kit | erase layer | PARA | EDIT |
-| ARP | arp pages (MODE on K1: OFF switches the arpeggiator off) | note repeat (rolls) | ARP | ARP; LED lit while the selected track's arpeggiator runs |
+| ARP | arp pages (MODE on K5: OFF switches the arpeggiator off) | note repeat (rolls) | ARP | ARP; LED lit while the selected track's arpeggiator runs |
 | SEQ | step / pattern pages | step layer (steps 1–16) | SEQ | SEQ |
 | GLO | global / master / system | mix layer (mute, solo, fill, tap) | GLOBE | GLO |
 | SAVE | song screen / save | song layer (slots A–D: used green, free white) | BT | SAVE (SLOOP has no Bluetooth) |
