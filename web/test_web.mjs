@@ -34,7 +34,7 @@ const E = vm.runInNewContext(proto + `
    CHOP, chopNovelty, chopHits, chopSnap, chopGrid, chopEqual, chopList, chopPick, chopFit, chopZones, wavFile, zipStore, crc32,
    UP, bank, capturePatch, auditionPatch, startWatch, libraryFile, readLibraryFile, paramKeys, patternFromSteps, stepsFromPattern, upName,
    mixer, GM_DRUM, drumName, parseNotes, fmtValue, F, DRUM_LANES, LV_NAMES, emptyDrum, lockable, MICRO, FC, fillGet, fillSet, pack7, unpack7,
-   loudDb, matchGains, withGain, LEVEL_MIN, backupCapture, backupRestore, backupObjects, b64enc, b64dec, FM6, KIT, kitPad, kitZones, kitLen, kitBytes, kitFit, kitSplit, kitLaneOf, kitPlace, zipRead, ROLL, SMF, ARR, mockSettings, fm6CartWrite, fm6CartPreset, fm6CartSlots, fm6CartPresets, DSYN, DSYN_MOCK_NAMES, DSYN_MOCK_KITS, SetGate, bkProjFormat, bkDevFormat, bkFwAtLeast })`,
+   loudDb, matchGains, withGain, LEVEL_MIN, backupCapture, backupRestore, backupObjects, b64enc, b64dec, FM6, KIT, kitPad, kitZones, kitLen, kitBytes, kitFit, kitSplit, kitLaneOf, kitPlace, zipRead, ROLL, SMF, ARR, mockSettings, fm6CartWrite, fm6CartPreset, fm6CartSlots, fm6CartPresets, DSYN, DSYN_MOCK_NAMES, DSYN_MOCK_KITS, SetGate, bkProjFormat, bkDevFormat, bkFwAtLeast, FM1_PORT_ED: FM1_PORT, fm1Ports })`,
 { setTimeout, clearTimeout, setInterval, clearInterval, console, TextEncoder, TextDecoder, Blob, Response, DecompressionStream });
 
 async function editorMock() {
@@ -1681,6 +1681,20 @@ async function portNames() {
   ok(["FM-1", "Felucca", "Felucca Update", "Clipper", "SLOOP", "MIDIIN2 (Clipper)", "USB-MIDI"].every((n) => PORT_RE.test(n)) &&
      !["Arturia KeyStep Pro", "loopMIDI Port", "Microsoft GS Wavetable Synth"].some((n) => PORT_RE.test(n)),
      "fm1ota.js: PORT_RE takes the FM-1's names (SLOOP, CLIPPER, the loader, the stock firmware), not other gear");
+  /* the editor finds the FM-1 by the installer's names (a port name kept from another firmware: "X0X FM-1") */
+  ok(E.FM1_PORT_ED.source === PORT_RE.source && E.FM1_PORT_ED.flags === PORT_RE.flags,
+     "editor: its FM1_PORT is the installer's");
+  const port = (name, type, state = "connected") => ({ id: `${type}-${name}`, name, type, state });
+  const acc = (names, gone = []) => ({
+    inputs: new Map([...names, ...gone].map((n) => [n, port(n, "input", gone.includes(n) ? "disconnected" : "connected")])),
+    outputs: new Map([...names, ...gone].map((n) => [n, port(n, "output", gone.includes(n) ? "disconnected" : "connected")])),
+  });
+  const pn = (a) => E.fm1Ports(a).map((x) => x.input.name + "/" + x.output.name).join(",");
+  ok(pn(acc(["X0X FM-1"])) === "X0X FM-1/X0X FM-1", "editor: a port named after another firmware (X0X FM-1) is found");
+  ok(pn(acc(["Arturia KeyStep Pro", "USB-MIDI", "X0X FM-1", "Felucca"], ["SLOOP"])) ===
+     "Felucca/Felucca,X0X FM-1/X0X FM-1,USB-MIDI/USB-MIDI",
+     "editor: Felucca first, then FM-1, then generic names; other gear and unplugged ports left out");
+  ok(pn(acc(["Arturia KeyStep Pro", "loopMIDI Port"])) === "", "editor: no FM-1 name: nothing to try");
 }
 
 await packages();
