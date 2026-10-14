@@ -707,6 +707,24 @@ static persist_t persist_saved;
 static void dsu_boot(void);
 #endif
 
+#if BOARD_SMK37 && FELUCCA_FLASH
+/* SMK-37: the wheels' calibration (HARDWARE CALIBRATION, smk_wheel.h) in an object of its own (storage.c OBJ_WCAL), so
+ * the settings object stays as SLOOP's; none, older data or out of range: the wheels calibrate themselves */
+static smk_wcal_t wcal_saved;
+static void wcal_boot(void)
+{
+    smk_wcal_t c;
+    if (st_load(OBJ_WCAL, &c, sizeof c) == (int)sizeof c && c.magic == SMK_WCAL_MAGIC)
+        wcal = c;                                  /* (each wheel's part checked where it is used) */
+    wcal_saved = wcal;
+}
+static void wcal_save(void)
+{
+    if (memcmp(&wcal, &wcal_saved, sizeof wcal) && st_save(OBJ_WCAL, &wcal, sizeof wcal) == 0)
+        wcal_saved = wcal;
+}
+#endif
+
 static void persist_boot(void)                    /* before settings_init / panel_init */
 {
 #if FELUCCA_ARRANGER
@@ -779,6 +797,9 @@ static void persist_boot(void)                    /* before settings_init / pane
             }
     }
     dsu_boot();                                    /* SLOOP 2.5: the SYN kits (after the settings) */
+#if BOARD_SMK37
+    wcal_boot();                                   /* SMK-37: the wheels' calibration */
+#endif
     up_boot();                                     /* user presets */
     fm6_bank_boot();                               /* the FM6 patch bank (fm6_bank.c) */
 #endif
@@ -809,6 +830,9 @@ static void midi_part_fill(uint8_t *b)
     b[2u * ML_N + 3u] = (uint8_t)(midi_set[3] | midi_set[4] << 7);
     b[2u * ML_N + 4u] = midi_set[5];
     b[2u * ML_N + 5u] = b[2u * ML_N + 6u] = b[2u * ML_N + 7u] = 0;
+#if BOARD_SMK37
+    b[2u * ML_N + 5u] = (uint8_t)bend_byte(bend_st);   /* SMK-37: HOME menu > MIDI > BEND RANGE (0: the default, 7) */
+#endif
 }
 static int midi_part_default(const uint8_t *b)
 {
@@ -818,7 +842,11 @@ static int midi_part_default(const uint8_t *b)
         if (b[k])
             return 0;
     return b[2u * ML_N] == def[0] && b[2u * ML_N + 1u] == def[1] && b[2u * ML_N + 2u] == def[2] &&
-           b[2u * ML_N + 3u] == (uint8_t)(def[3] | def[4] << 7) && b[2u * ML_N + 4u] == def[5];
+           b[2u * ML_N + 3u] == (uint8_t)(def[3] | def[4] << 7) && b[2u * ML_N + 4u] == def[5]
+#if BOARD_SMK37
+           && !b[2u * ML_N + 5u]
+#endif
+        ;
 }
 /* n: 32 (the map), 36 (and the channels) or MIDI_PART; every entry checked (a CC that learns, a parameter this knows, a
  * channel 0..16, a range 1..12) */
@@ -841,6 +869,9 @@ static void midi_part_read(const uint8_t *b, uint32_t n)
     if (n >= MIDI_PART) {
         midi_set[5] = (uint8_t)(b[2u * ML_N + 4u] >= 1u && b[2u * ML_N + 4u] <= 12u ? b[2u * ML_N + 4u] : 2u);
         song.g[G_BEND] = midi_set[5];
+#if BOARD_SMK37
+        bend_st = (uint8_t)bend_of_byte(b[2u * ML_N + 5u]);   /* (older data: 0, the default) */
+#endif
     }
     fm1_irq_on();
 }
@@ -901,6 +932,9 @@ static void settings_save(void)
     if (!flash_ok)
         return;
     persist_fill(&p);
+#if BOARD_SMK37
+    wcal_save();
+#endif
     {
         uint8_t mp[MIDI_PART];
         midi_part_fill(mp);

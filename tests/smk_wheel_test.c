@@ -1,11 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* SMK-37 Pro pitch wheel (firmware/src/smk_wheel.h): the bend is back to 0 once the wheel rests again, however
- * it was moved. v0.1 moved the centre by one count every 200 calls; the main loop calls it some 10 000 to
+/* SMK-37 wheels (firmware/src/smk_wheel.h): HOME menu > MIDI > BEND RANGE (the range math, its steps, the settings
+ * byte), the wheels taught by HARDWARE CALIBRATION (the full travel gives the full range, the re-centre at power-on,
+ * the mod wheel, older data), then the drift test (+-7 semitones, not taught): the bend is back to 0 once the
+ * wheel rests again, however it was moved. v0.1 moved the centre by one count every 200 calls; the main loop calls it some 10 000 to
  * 50 000 times a second, so a slow touch dragged the centre along, the spring brought the wheel back outside
  * the dragged dead band and a bend of several semitones stayed on, on whichever synth track was selected:
  * switching tracks took it off one track and put it on the next ("track 1 transposes when I change track"). */
 #include <stdio.h>
+#include <string.h>
 #include "../firmware/src/smk_wheel.h"
+#define SMK_PW_ST 7                /* the drift test: the old fixed range */
 static int fails;
 static void check(int ok, const char *what) { printf("smk_wheel: %-66s %s\n", what, ok ? "ok" : "FAIL"); fails += !ok; }
 
@@ -41,6 +45,7 @@ static int32_t old_bend(old_t *w, int32_t p)
 #define REST 540
 static uint32_t now;
 static smk_pw_t nw;
+static const smk_wcal_t nocal;   /* not taught (older data): the self-calibration */
 static old_t ow;
 static int32_t nb, ob;
 /* move the wheel linearly from a to b over ms milliseconds (the ADC's /4 IIR: a reading every 2.4 ms) */
@@ -53,7 +58,7 @@ static void move(int32_t a, int32_t b, uint32_t ms)
         if (t % 2u == 0u)
             f += (raw - f) / 4;
         for (c = 0; c < CALLS_PER_MS; c++) {
-            nb = smk_pw_bend(&nw, f, now);
+            nb = smk_pw_bend(&nw, &nocal, f, now, SMK_PW_ST);
             ob = old_bend(&ow, f);
         }
     }
@@ -68,9 +73,88 @@ static void reset(void)
     move(REST, REST, 500);                      /* calibrated at rest */
 }
 
+/* ---- BEND RANGE, the calibration ---- */
+static int32_t pb(smk_pw_t *w, const smk_wcal_t *c, int32_t p, uint32_t st) { return smk_pw_bend(w, c, p, 1000, st); }
+static void new_features(void)
+{
+    smk_wcal_t c = {0}, keep;
+    smk_pw_t w;
+    smk_mw_t m;
+    uint32_t i, ok;
+    char b[96];
+
+    /* BEND RANGE: the steps, the settings byte */
+    check(BEND_ST[0] == 1 && BEND_ST[BEND_N - 1u] == 12 && bend_st == 7u && BEND_DEF == 7u, "BEND RANGE: 1 2 3 4 5 7 12, default 7 (as before)");
+    check(bend_step(2, 1) == 3 && bend_step(5, 1) == 7 && bend_step(7, 1) == 12 && bend_step(12, 1) == 12 &&
+          bend_step(1, -1) == 1 && bend_step(7, -1) == 5, "BEND RANGE: a knob turn steps, stops at the ends");
+    check(bend_step(12, 0) == 1 && bend_step(2, 0) == 3 && bend_step(9, 1) == BEND_DEF, "BEND RANGE: OCT+ steps round; a bad value: 7");
+    for (ok = 1, i = 0; i < BEND_N; i++)
+        ok &= bend_of_byte(bend_byte(BEND_ST[i])) == BEND_ST[i];
+    check(ok && bend_byte(7) == 0u && bend_byte(2) == 2u, "BEND RANGE: each value round trips in its settings byte (7: 0)");
+    check(bend_of_byte(0) == 7u && bend_of_byte(6) == 7u && bend_of_byte(255) == 7u, "BEND RANGE: older data (0) or garbage: 7");
+
+    /* the calibration: rest 533..537, full down 448, full up 636 */
+    check(smk_wcal_pitch(&c, 533, 537, 448, 636) && c.pc == 535 && c.plo == 451 && c.phi == 633 && c.pdead == 14,
+          "calibration: pitch rest 535, ends 3 counts in, dead band from the noise (14)");
+    check(smk_wcal_mod(&c, 627, 629, 476) && c.mrest == 628 && c.mtop == 479 && c.mdead == 10,
+          "calibration: mod bottom 628, top 3 counts in, dead band 10");
+    keep = c;
+    check(!smk_wcal_pitch(&c, 533, 537, 520, 550) && !memcmp(&c, &keep, sizeof c),
+          "calibration: too little travel is refused, the old one kept");
+    check(!smk_wcal_mod(&c, 600, 602, 590) && !memcmp(&c, &keep, sizeof c), "calibration: mod, too little travel refused");
+
+    /* the range math with the calibration: the full travel = the full range, each BEND RANGE */
+    for (ok = 1, i = 0; i < BEND_N; i++) {
+        uint32_t st = BEND_ST[i];
+        int32_t full = (int32_t)st * 4096, half;
+        memset(&w, 0, sizeof w);
+        ok &= pb(&w, &c, 535, st) == 0;
+        ok &= pb(&w, &c, 535 + 13, st) == 0 && pb(&w, &c, 535 + 15, st) > 0;   /* the dead band */
+        half = pb(&w, &c, 535 + 14 + (633 - 535 - 14) / 2, st);              /* half the travel past the dead band */
+        ok &= half > full / 2 - 64 && half < full / 2 + 64;
+        ok &= pb(&w, &c, 451, st) == -full && pb(&w, &c, 448, st) == -full;   /* full down (the taught end, the stop) */
+        ok &= pb(&w, &c, 633, st) == full && pb(&w, &c, 636, st) == full;
+    }
+    check(ok, "taught: full down / up = -/+ BEND RANGE (1..12), half way = half, the dead band");
+    memset(&w, 0, sizeof w);
+    snprintf(b, sizeof b, "BEND RANGE 2: +2 semitones = %d/4096 at full up", (int)pb(&w, &c, 640, 2));
+    check(pb(&w, &c, 640, 2) == 2 * 4096, b);
+
+    /* power-on: a wheel resting near the taught rest is the centre; one held is not */
+    memset(&w, 0, sizeof w);
+    pb(&w, &c, 545, 2);
+    check(w.pc == 545 && pb(&w, &c, 545, 2) == 0, "power-on: resting within the dead band (545): re-centred there");
+    memset(&w, 0, sizeof w);
+    check(pb(&w, &c, 600, 2) > 0 && w.pc == 535, "power-on: a wheel held up (600): the taught rest, it bends");
+    check(pb(&w, &c, 535, 2) == 0, "... and let go: no bend");
+
+    /* not taught (older data): as before, the first reading the centre, the ends 80 away, dead band 12 */
+    memset(&w, 0, sizeof w);
+    check(pb(&w, &nocal, 540, 7) == 0 && w.pc == 540 && w.plo == 460 && w.phi == 620 && w.dead == 12,
+          "not taught (older data): the first reading the centre, as before");
+    check(pb(&w, &nocal, 620, 7) == 7 * 4096, "not taught: +80 = the full range");
+    c.magic = 0;
+    memset(&w, 0, sizeof w);
+    check(!smk_wcal_pitch_ok(&c) && !smk_wcal_mod_ok(&c) && pb(&w, &c, 540, 2) == 0 && w.dead == 12,
+          "a calibration without its mark is not used");
+    c.magic = SMK_WCAL_MAGIC;
+
+    /* the mod wheel */
+    memset(&m, 0, sizeof m);
+    check(smk_mw_val(&m, &c, 628) == 0 && smk_mw_val(&m, &c, 620) == 0, "mod taught: at the bottom (and its noise): 0");
+    check(smk_mw_val(&m, &c, 479) == 127 && smk_mw_val(&m, &c, 476) == 127, "mod taught: full up: 127");
+    memset(&m, 0, sizeof m);
+    i = (uint32_t)smk_mw_val(&m, &c, 628 - 10 - (628 - 479 - 10) / 2);
+    check(i >= 62 && i <= 65, "mod taught: half way: 64");
+    memset(&m, 0, sizeof m);
+    check(smk_mw_val(&m, &nocal, 615) == 0 && smk_mw_val(&m, &nocal, 485) == 127 && m.dead == 12,
+          "mod not taught: 485..615 as before");
+}
+
 int main(void)
 {
     char b[96];
+    new_features();
     reset();
     check(nb == 0 && ob == 0, "at rest: no bend");
     move(REST, REST + 100, 60);                 /* a quick bend to the top */

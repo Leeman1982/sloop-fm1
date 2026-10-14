@@ -89,7 +89,17 @@ vel_applied() {
 }
 run "SMK-37 menu KEY VELOCITY: applied wherever the app reads a key or pad velocity" vel_applied
 $CC -o "$OUT/smk_wheel_test" tests/smk_wheel_test.c
-run "SMK-37 Pro pitch wheel: the bend is back to 0 at rest, however slowly the wheel was moved" "$OUT/smk_wheel_test"
+run "SMK-37 wheels: BEND RANGE, the calibration (full travel = full range, re-centre), back to 0 at rest" "$OUT/smk_wheel_test"
+$CC -o "$OUT/smk_midi_out_test" tests/smk_midi_out_test.c
+run "SMK-37 TRS MIDI OUT: the bytes, the ring, one byte at a time, OFF, no UART: no hang" "$OUT/smk_midi_out_test"
+# every USB MIDI out packet goes to the TRS jack too (usb.c midi_out_event, before the USB check), and the TIMER5 tick
+# drains it
+trs_fed() {
+    sed -n '/^static void midi_out_event/,/^}/p' firmware/src/usb.c | grep -q 'smo_put(pkt);' &&
+    [ "$(grep -c 'midi_out_q\[mo_w % MQ\] =' firmware/src/usb.c)" = 1 ] &&
+    sed -n '/^void fm1_timer5_irq/,/^}/p' firmware/src/main.c | grep -q 'smo_tick();' && echo fed
+}
+run "SMK-37 TRS MIDI OUT: fed from every USB MIDI out packet, drained by the TIMER5 tick" trs_fed
 # no divide by 0 (the FM-1 runs with the div0 trap off, hal/fm1_irq.h: a real one would give a wrong value
 # silently): the UI fuzz, the sequencer, the projects and a minute of random live use, with UBSan
 UBSAN="${CC_UB:-cc} -O1 -w -fsanitize=integer-divide-by-zero -fno-sanitize-recover=integer-divide-by-zero -Ibuild/gen -Ifirmware/src -Ifirmware/hal"

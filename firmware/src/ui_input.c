@@ -1280,13 +1280,85 @@ static void ui_input(void)
 /* ---------------------------------------------------- panel setup --- */
 /* 30 s without input: give up and keep the old table (a stuck key cannot hang the boot) */
 #define SETUP_IDLE_MS 30000u
+#if BOARD_SMK37
+/* the wheels (smk_wheel.h), after the buttons and knobs: one step a screen, the reading shown, OCT+ (as just taught)
+ * takes it. A step at an end counts the furthest reading of the whole step (a wheel let go a moment early still
+ * reached its end); a step at rest samples 0.3 s after OCT+ (its noise sets the dead band). 1: OCT+, 0: 30 s idle */
+static int wheel_step(uint32_t ch, const char *wheel, const char *where, int rest, int32_t *lo, int32_t *hi)
+{
+    uint32_t t0 = fm1_ms, shown = 0, ok = 1u << panel.btn[B_OCTUP];
+    char b[8];
+    lcd_fill(0, 60, 240, 130, C_BLACK);
+    draw_text_box(0, 70, 240, &FONT_S, wheel, C_GRAY, 1);
+    draw_text_box(0, 92, 240, &FONT_L, where, C_WHITE, 1);
+    draw_text_box(0, 160, 240, &FONT_S, "THEN PRESS OCT+", C_GRAY, 1);
+    *lo = 1023, *hi = 0;
+    fm1_input_edges(0);
+    for (;;) {
+        int32_t v = fm1_in.wheel[ch];
+        fm1_wdt_feed();
+        if (v < *lo)
+            *lo = v;
+        if (v > *hi)
+            *hi = v;
+        if (fm1_input_edges(0) & ok)
+            break;
+        if (fm1_ms - t0 > SETUP_IDLE_MS)
+            return 0;
+        if (fm1_ms - shown >= 100u) {                   /* the reading, ten times a second */
+            shown = fm1_ms;
+            fmt_int(b, v);
+            draw_text_box(0, 128, 240, &FONT_S, b, C_AMB, 1);
+        }
+    }
+    if (rest) {                                         /* at rest: the readings after OCT+ */
+        *lo = 1023, *hi = 0;
+        for (t0 = fm1_ms; fm1_ms - t0 < 300u;) {
+            int32_t v = fm1_in.wheel[ch];
+            fm1_wdt_feed();
+            if (v < *lo)
+                *lo = v;
+            if (v > *hi)
+                *hi = v;
+        }
+    }
+    return 1;
+}
+static void wheel_setup(void)
+{
+    int32_t rlo, rhi, lo, hi, dlo, dhi;
+    smk_wcal_t c = wcal;
+    const char *msg = 0;
+    uint32_t t0 = fm1_ms;
+    while (fm1_in.frames < 300u && fm1_ms - t0 < 2000u)   /* (the readings settle) */
+        fm1_wdt_feed();
+    if (!wheel_step(0, "PITCH WHEEL", "LET IT REST", 1, &rlo, &rhi) ||
+        !wheel_step(0, "PITCH WHEEL", "FULL DOWN", 0, &dlo, &dhi) || !wheel_step(0, "PITCH WHEEL", "FULL UP", 0, &lo, &hi))
+        msg = "WHEELS NOT CHANGED";
+    else if (!smk_wcal_pitch(&c, rlo, rhi, dlo, hi))
+        msg = "PITCH: TOO LITTLE TRAVEL";
+    if (!msg && (!wheel_step(1, "MOD WHEEL", "AT THE BOTTOM", 1, &rlo, &rhi) ||
+                 !wheel_step(1, "MOD WHEEL", "FULL UP", 0, &lo, &hi)))
+        msg = "MOD WHEEL NOT CHANGED";
+    else if (!msg && !smk_wcal_mod(&c, rlo, rhi, lo))
+        msg = "MOD: TOO LITTLE TRAVEL";
+    wcal = c;                                           /* (what was taught: the pitch wheel even if the mod was not) */
+    wcal_gen++;
+    if (msg)
+        ui_message(msg);
+}
+#endif
 static void panel_setup(void)
 {
     uint32_t i, used = 0, t0 = fm1_ms;
     const panel_t old = panel;
     lcd_fill(0, 0, 240, 240, C_BLACK);
     draw_text_box(0, 10, 240, &FONT_S, "HARDWARE CALIBRATION", C_WHITE, 1);
+#if BOARD_SMK37
+    draw_text_box(0, 30, 240, &FONT_S, "BUTTONS, KNOBS, WHEELS", C_GRAY, 1);
+#else
     draw_text_box(0, 30, 240, &FONT_S, "TEACH EACH BUTTON AND KNOB", C_GRAY, 1);
+#endif
     while (fm1_in.buttons) {                             /* wait for OCT-/OCT+ release */
         fm1_wdt_feed();
         if (fm1_ms - t0 > SETUP_IDLE_MS)
@@ -1336,6 +1408,9 @@ static void panel_setup(void)
         fm1_enc_take(e);
     }
     panel.magic = PANEL_MAGIC;
+#if BOARD_SMK37
+    wheel_setup();
+#endif
     lcd_fill(0, 0, 240, 240, C_BLACK);
     layers_init();
     ui.force = 1;

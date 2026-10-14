@@ -22,6 +22,12 @@
  * left: A/B needs no two neighbours); the FM6 patch bank (fm6_bank.c, SLOOP 2.4): 0xE5000 / 0xE6000, the first
  * two sectors of the free 0xE5000..0xFBFFF after the update staging (FL_FM6, fm1_flash.h) */
 enum { OBJ_SETTINGS, OBJ_PROJECT0, OBJ_UPRESET0 = OBJ_PROJECT0 + 4, OBJ_AUTOSAVE = OBJ_UPRESET0 + 2, OBJ_FM6BANK, OBJ_COUNT };
+#if BOARD_SMK37
+#define OBJ_WCAL OBJ_COUNT                     /* SMK-37: the wheels' calibration (project.c), 0xB1000 / 0xB2000 */
+#define ST_NOBJ (OBJ_COUNT + 1)
+#else
+#define ST_NOBJ OBJ_COUNT
+#endif
 
 typedef struct {
     uint32_t magic;
@@ -52,16 +58,21 @@ static uint32_t st_crc32(const void *p, uint32_t n)   /* zlib CRC-32, 4 bits per
 #if BOARD_SMK37
 /* SMK-37 Pro (see the fm1-to-smk37 guide): every object in FL_DATA 0x9D000..0xBAFFF (the stock VM),
  * A/B neighbours: projects 0x9D000..0xA4FFF, user preset banks 0xA5000..0xA8FFF, autosave 0xA9000 /
- * 0xAA000, FM6 bank 0xAB000 / 0xAC000, settings 0xAD000 / 0xAE000; 0xAF000..0xBAFFF spare. Never near
- * BTIF / USRTRIM (0xC0000..0xC1FFF) or key_mac (0xFF000). */
+ * 0xAA000, FM6 bank 0xAB000 / 0xAC000, settings 0xAD000 / 0xAE000; the owner tag 0xAF000; 0xB0000 left alone (the
+ * stock firmware's); the wheels' calibration 0xB1000 / 0xB2000 (OBJ_WCAL); 0xB3000..0xBAFFF spare. Never near BTIF / USRTRIM
+ * (0xC0000..0xC1FFF) or key_mac (0xFF000). */
 #define ST_SMK_BASE 0x9D000u
 #define ST_SMK_SECTORS (2u * OBJ_COUNT)
+#define ST_OWNER_OFF (ST_SMK_BASE + ST_SMK_SECTORS * ST_SECTOR)
 _Static_assert(ST_SMK_BASE + ST_SMK_SECTORS * ST_SECTOR <= 0xBB000u, "SMK store: past FL_DATA");
+_Static_assert(ST_OWNER_OFF + 4u * ST_SECTOR <= 0xBB000u, "SMK store: the owner tag and OBJ_WCAL past FL_DATA");
 static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy A (0) / B (1) */
 {
     static const uint8_t ORDER[OBJ_COUNT] = {
         [OBJ_PROJECT0] = 0, [OBJ_PROJECT0 + 1] = 1, [OBJ_PROJECT0 + 2] = 2, [OBJ_PROJECT0 + 3] = 3,
         [OBJ_UPRESET0] = 4, [OBJ_UPRESET0 + 1] = 5, [OBJ_AUTOSAVE] = 6, [OBJ_FM6BANK] = 7, [OBJ_SETTINGS] = 8};
+    if (obj == OBJ_WCAL)
+        return ST_OWNER_OFF + (2u + (copy & 1u)) * ST_SECTOR;
     return ST_SMK_BASE + (ORDER[obj % OBJ_COUNT] * 2u + (copy & 1u)) * ST_SECTOR;
 }
 
@@ -78,8 +89,6 @@ static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy 
 #ifndef FELUCCA_DATA_UNTAGGED_OK
 #define FELUCCA_DATA_UNTAGGED_OK 1
 #endif
-#define ST_OWNER_OFF (ST_SMK_BASE + ST_SMK_SECTORS * ST_SECTOR)
-_Static_assert(ST_OWNER_OFF + ST_SECTOR <= 0xBB000u, "SMK store owner: past FL_DATA");
 static uint8_t st_owner_cleared;                /* (the UI may say so) */
 static void st_owner_check(void)
 {
@@ -99,6 +108,8 @@ static void st_owner_check(void)
     if (!erased || !FELUCCA_DATA_UNTAGGED_OK) {     /* another firmware's store: clear it */
         for (s = 0; s < ST_SMK_SECTORS; s++)
             st_erase(ST_SMK_BASE + s * ST_SECTOR);
+        st_erase(st_sector(OBJ_WCAL, 0));
+        st_erase(st_sector(OBJ_WCAL, 1));
         st_owner_cleared = 1;
     }
     st_erase(ST_OWNER_OFF);
@@ -124,7 +135,7 @@ static uint8_t st_buf[ST_PAYLOAD_MAX] __attribute__((aligned(4)));
 
 static int st_head(uint32_t obj, uint32_t copy, st_hdr_t *h)   /* commit record valid: 0 */
 {
-    if (obj >= OBJ_COUNT || copy > 1u)
+    if (obj >= ST_NOBJ || copy > 1u)
         return -1;
     if (st_read(st_sector(obj, copy), h, sizeof *h))
         return -1;
@@ -189,7 +200,7 @@ static int st_save3(uint32_t obj, const void *src, uint32_t len, const void *src
     uint32_t seq, base, off;
     int cur, rc;
     st_hdr_t h;
-    if (obj >= OBJ_COUNT || len + len2 + len3 > ST_PAYLOAD_MAX)
+    if (obj >= ST_NOBJ || len + len2 + len3 > ST_PAYLOAD_MAX)
         return -1;
     cur = st_current(obj, &h);
     seq = cur < 0 ? 0u : h.seq;

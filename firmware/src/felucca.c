@@ -59,11 +59,15 @@
 #ifndef FELUCCA_UAC_TONE
 #define FELUCCA_UAC_TONE 0       /* bench: the USB input sends test triangles instead of the music */
 #endif
+#if BOARD_SMK37
+#include "smk_uart_tx.h"
+#include "smk_midi_out.h"     /* SMK-37: TRS MIDI OUT (UART1 TX, PC7), fed by usb.c midi_out_event */
+#endif
 #include "usb.c"
 #ifndef FELUCCA_UART
 #if BOARD_SMK37
-#define FELUCCA_UART 0           /* SMK-37 Pro: TRS MIDI OUT (UART1 TX, PC7), no MIDI IN; PH8 is a key-matrix
-                                  * row there and must never become UART RX. TODO: a TX driver (see the fm1-to-smk37 guide) */
+#define FELUCCA_UART 0           /* SMK-37 Pro: the jack is MIDI OUT (smk_midi_out.h), no MIDI IN; PH8 is a key-matrix
+                                  * row there and must never become UART RX */
 #else
 #define FELUCCA_UART 1           /* TRS MIDI IN on UART1 (3.5 mm jack) */
 #endif
@@ -76,6 +80,7 @@
 #endif
 #if BOARD_SMK37
 #include "smk_vel.h"          /* SMK-37: menu KEY VELOCITY (DYNAMIC, curves, FIXED), read by seq.c */
+#include "smk_wheel.h"        /* SMK-37: the wheels, their calibration, menu BEND RANGE (main.c smk_wheels) */
 #endif
 #define FELUCCA_ARRANGER 1
 #include "arranger.c"

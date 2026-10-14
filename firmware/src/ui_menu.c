@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* SLOOP menu (HOME held), in sections as the pages are (2.4): SCREEN (COLOR, ZOOM), LIGHTS (LIGHTS, KEYS, NOTES),
- * AUDIO (LOWCUT, USB AUDIO, USB SERIAL; SMK-37: KEY VELOCITY), SYSTEM (HARDWARE CALIBRATION, LEARN CLEAR (2.6), ABOUT).
+ * AUDIO (LOWCUT, USB AUDIO, USB SERIAL; SMK-37: KEY VELOCITY), SMK-37: MIDI (TRS MIDI OUT, BEND RANGE), SYSTEM
+ * (HARDWARE CALIBRATION, LEARN CLEAR (2.6), ABOUT).
  * SELECT goes to the section before / after (stopping at the ends), KNOB 1..3 (a fourth row: 4) set the section's
  * settings in order (the knob's colour marks its row), PRESETS moves the cursor; OCT+ steps the cursor's setting
  * round or opens it (CALIBRATION, ABOUT), OCT- closes (from ABOUT: back to the section). */
@@ -9,18 +10,28 @@
 enum { MI_COLOR, MI_ZOOM, MI_LIGHTS, MI_KEYS, MI_NOTES, MI_LOWCUT, MI_USB, MI_SERIAL,
 #if BOARD_SMK37
        MI_VEL,                                     /* SMK-37: AUDIO > KEY VELOCITY (K8), smk_vel.h */
+       MI_TRS, MI_BEND,                            /* SMK-37: MIDI > TRS MIDI OUT (K5, smk_midi_out.h), BEND RANGE (K6,
+                                                    * smk_wheel.h) */
 #endif
        MI_PANEL, MI_LCLEAR, MI_ABOUT, MI_COUNT };
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "ZOOM", "LIGHTS", "KEYS", "NOTES", "SPEAKER LOWCUT", "USB AUDIO",
                                               "USB SERIAL",
 #if BOARD_SMK37
-                                              "KEY VELOCITY",
+                                              "KEY VELOCITY", "TRS MIDI OUT", "BEND RANGE",
 #endif
                                               "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT"};
 #define MI_SYS0 MI_PANEL
+#if BOARD_SMK37
+enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_MIDI, MS_SYSTEM, MS_COUNT };
+static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "MIDI", "SYSTEM"};
+static const uint8_t MS_FIRST[MS_COUNT + 1] = {MI_COLOR, MI_LIGHTS, MI_LOWCUT, MI_TRS, MI_SYS0, MI_COUNT};
+#define MS_GAP 4                                   /* (five tabs across the screen) */
+#else
 enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_SYSTEM, MS_COUNT };
 static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "SYSTEM"};   /* (AUDIO: and USB) */
 static const uint8_t MS_FIRST[MS_COUNT + 1] = {MI_COLOR, MI_LIGHTS, MI_LOWCUT, MI_SYS0, MI_COUNT};   /* rows of each */
+#define MS_GAP 10
+#endif
 static const char *const LIGHTS_NAME[LIGHTS_N] = {"OFF", "LOW", "MID", "HIGH"};   /* every button lit, the labels readable */
 static const char *const KEYS_NAME[KEYS_N] = {"OFF", "C KEYS", "WHITE KEYS", "ALL KEYS"};      /* keys lit too, at the LIGHTS level */
 #define MI_Y0 26                                   /* the first row, under the section tabs */
@@ -52,6 +63,18 @@ static const char *mi_value(uint32_t i, uint16_t *c)
     case MI_SERIAL: return usb_serial ? "ON" : "OFF";
 #if BOARD_SMK37
     case MI_VEL: return VEL_NAME[vel_mode % VEL_N];
+    case MI_TRS:
+        if (trs_out && smo.dead) {                    /* (the UART never finished a byte: OCT+ tries again) */
+            *c = C_AMB;
+            return "NOT SENDING";
+        }
+        return trs_out ? "ON" : "OFF";
+    case MI_BEND: {                                   /* +-semitones of the pitch wheel, the internal sounds */
+        static char b[16];
+        fmt_int(b, (int32_t)bend_st);
+        str_cpy(b + str_len(b), bend_st == 1u ? " SEMITONE" : " SEMITONES", 11);
+        return b;
+    }
 #endif
     case MI_LCLEAR: {                                 /* (2.6) the CCs MIDI LEARN holds; OCT+ clears them */
         static char b[8];
@@ -77,7 +100,7 @@ static void draw_menu(void)
                    settings.zoom * 104729u + lights_lvl * 1299709u + lights_keys * 15485863u + ml_count() * 2654435u +
                    lights_notes * 32452843u + usb_full * 49979687u + usb_serial * 86028121u;
 #if BOARD_SMK37
-    sig += vel_mode * 179424673u;
+    sig += vel_mode * 179424673u + trs_out * 373587883u + smo.dead * 573259391u + bend_st * 817504243u;
 #endif
     if (!ui.force && sig == ui.menu_sig)
         return;
@@ -128,7 +151,7 @@ static void draw_menu(void)
                 if (i == sec)
                     cv_rect(x - 2, 3, w + 4, 18, C_LINE);
                 cv_text(x, 4, &FONT_S, MS_NAME[i], i == sec ? C_WHITE : C_DIM);
-                x += w + 10;
+                x += w + MS_GAP;
             }
             for (i = MS_FIRST[sec]; i < MS_FIRST[sec + 1u]; i++) {
                 uint32_t r = i - MS_FIRST[sec];
@@ -215,6 +238,12 @@ static void mi_set(uint32_t i, int32_t s)
         lights_notes = (uint8_t)(s > 0 ? 1u : s < 0 ? 0u : !lights_notes);
         break;
 #if BOARD_SMK37
+    case MI_TRS:                                       /* right ON, left OFF; OCT+ toggles (ON tries the UART again) */
+        smo_on(s > 0 ? 1u : s < 0 ? 0u : !trs_out);
+        break;
+    case MI_BEND:                                      /* 1, 2, 3, 4, 5, 7, 12 (stops at the ends); OCT+ steps round */
+        bend_st = (uint8_t)bend_step(bend_st, s);
+        break;
     case MI_VEL:                                       /* DYNAMIC .. FIXED 127 (stops at the ends); OCT+ steps round */
         if (s > 0 && vel_mode + 1u < VEL_N)
             vel_mode++;

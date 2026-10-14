@@ -11,8 +11,12 @@ enum { B_FX, B_SCL, B_ENV, B_LFO, B_EDIT, B_GLO, B_HOME, B_SAVE, B_ARP, B_SEQ, B
 enum { EN_SELECT, EN_ALGO, EN_PRESET, EN_K1, EN_K2, EN_K3, EN_K4, NE };
 static const char *const B_NAME[NB] = {"FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE",
                                         "ARP", "SEQ", "PLAY", "REC", "OCT-", "OCT+"};
+#if BOARD_SMK37                          /* (the SMK-37's knobs as printed: K5..K8 are KNOB 1..4) */
+static const char *const E_NAME[NE] = {"K2 SELECT", "K3 ALGORITHM", "K4 PRESETS", "K5", "K6", "K7", "K8"};
+#else
 static const char *const E_NAME[NE] = {"SELECT", "ALGORITHM", "PRESETS", "KNOB 1", "KNOB 2",
                                         "KNOB 3", "KNOB 4"};
+#endif
 #if BOARD_SMK37
 #define PANEL_MAGIC 0x504E5334u          /* "PNS4" (SMK-37 Pro): bump when PANEL_DEFAULT changes */
 #else
@@ -118,6 +122,7 @@ static uint32_t lights_word(void)
            (uint32_t)(lights_min >= 2u && lights_min <= 17u ? lights_min - 1u : 0u) << 21   /* 2.6: CH n (n 1..16; 0 none) */
 #if BOARD_SMK37
            | vel_word(vel_mode)                                /* SMK-37: menu KEY VELOCITY, bits 28..30 (smk_vel.h) */
+           | (uint32_t)!trs_out << 31                          /* SMK-37: menu TRS MIDI OUT, 1 = OFF (older data: ON) */
 #endif
         ;
 }
@@ -138,6 +143,7 @@ static void lights_from_word(uint32_t w)
     vis_style = (uint8_t)(((w >> 17) & 15u) % VIS_STYLES);   /* the visualiser (ui_vis.c); 0 in 2.3 = OSCILLOSCOPE */     /* menu USB SERIAL (usb.c usb_cdc_on, at the next start); 0 in 2.3 = OFF */
 #if BOARD_SMK37
     vel_mode = (uint8_t)vel_of_word(w);         /* (older data: DYNAMIC) */
+    trs_out = (uint8_t)!(w >> 31);              /* (older data: ON) */
 #endif
 }
 

@@ -20,6 +20,9 @@ void fm1_timer5_irq(void)
     fm1_timer5_ack();
     felucca_dbg.timer_irqs++;
     fm1_input_tick();
+#if BOARD_SMK37
+    smo_tick();                                 /* TRS MIDI OUT: a byte when the last has gone (also nested) */
+#endif
     {   /* milliseconds from the 24 MHz TIMER4 (robust to a late tick) */
         static uint32_t last, acc;
         acc += t0 - last;
@@ -117,32 +120,25 @@ static void smk_faders(void)
     }
 }
 
-/* the wheels (stock: mux C address 4 = pitch, 5 = mod), self-calibrating (the travel is short: raw ~445..640
- * pitch, ~474..629 mod on a unit). Pitch: smk_wheel.h (+-SMK_BEND_ST semitones, a dead band around the rest,
- * which follows a slow drift in time); mod: 0..127, up (lower raw) = more (voice.c perf_*) */
-#include "smk_wheel.h"
-#if SMK_PW_ST != SMK_BEND_ST
-#error "smk_wheel.h SMK_PW_ST and voice.c SMK_BEND_ST differ"
-#endif
+/* the wheels (stock: mux C address 4 = pitch, 5 = mod; the travel is short: raw ~445..640 pitch, ~474..629 mod on a
+ * unit): smk_wheel.h, taught by HARDWARE CALIBRATION (wcal) or calibrating themselves; pitch +-BEND RANGE semitones
+ * (bend_st), mod 0..127, up = more (voice.c perf_*) */
 static void smk_wheels(void)
 {
-    enum { DEAD = 12, MOD_LO = 485, MOD_HI = 615 };
     static smk_pw_t pw;
-    static int32_t mlo, mhi;
-    int32_t m = fm1_in.wheel[1], mw;
+    static smk_mw_t mw;
+    static uint8_t gen;
     if (fm1_in.frames < 300u)                     /* (the readings settle) */
         return;
-    if (!mhi) {
-        mlo = m < MOD_LO ? m : MOD_LO;
-        mhi = m > MOD_HI ? m : MOD_HI;
+    if (gen != wcal_gen) {                        /* a new calibration: start over with it */
+        smk_pw_t zp = {0};
+        smk_mw_t zm = {0};
+        pw = zp;
+        mw = zm;
+        gen = wcal_gen;
     }
-    if (m < mlo)
-        mlo = m;
-    if (m > mhi)
-        mhi = m;
-    mw = mhi - m <= DEAD ? 0 : (mhi - m - DEAD) * 127 / (mhi - mlo - DEAD > 1 ? mhi - mlo - DEAD : 1);
-    perf_bend = smk_pw_bend(&pw, fm1_in.wheel[0], fm1_ms);
-    perf_modw = clamp(mw, 0, 127);
+    perf_bend = smk_pw_bend(&pw, &wcal, fm1_in.wheel[0], fm1_ms, bend_st);
+    perf_modw = smk_mw_val(&mw, &wcal, fm1_in.wheel[1]);
 }
 #endif
 
@@ -243,6 +239,9 @@ static void fm1_main(void)
     usb_start();
 #if FELUCCA_UART
     uart_midi_init();
+#endif
+#if BOARD_SMK37
+    smk_uart1_tx_init();                                /* TRS MIDI OUT (PORTC, IOMAP RMW: before TIMER5) */
 #endif
     timer5_start();
     fm1_guard_lock_top();

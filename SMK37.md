@@ -57,7 +57,7 @@ update mode (UBOOT).
 | KNOB 3 | dial 3 on screen (yellow) | K7 | dial 3 |
 | KNOB 4 | dial 4 on screen (orange) | K8 | dial 4 |
 | — | — | FADER 1–4 | tracks 1–4 (4 = drums), by FADER BANK: A level, B filter (low-pass ◀ open ▶ high-pass), C reverb, D delay; a fader takes over once moved |
-| — (no wheels used by SLOOP) | — | PITCH wheel | pitch bend ±7 semitones, selected synth track |
+| — (no wheels used by SLOOP) | — | PITCH wheel | pitch bend, selected synth track: ±BEND RANGE (HOME menu > MIDI, K6: 1, 2, 3, 4, 5, 7, 12 semitones; default 7) |
 | — | — | MOD wheel | vibrato 10 Hz, up to ±1 semitone (up = more) |
 | — | — | PEDAL jack | — |
 
@@ -107,6 +107,36 @@ notes, their MIDI out and the drum levels; OCT− / OCT+ held still play ghost /
 | FIXED 100 | always 100, as the FM-1's keys (drums: normal) |
 | FIXED 127 | always 127 (drums: hard) |
 
+## MIDI: TRS MIDI OUT, BEND RANGE
+
+HOME menu (PATCH held) > **MIDI** (the fourth section; SELECT / K2 walks the sections):
+
+| Row | Knob | Setting |
+|---|---|---|
+| TRS MIDI OUT | K5 | ON (default) / OFF. The 3.5 mm jack sends what goes out over USB MIDI: the keys and pads (and the sequencer with GLO > SYSTEM > MIDI = SEQ), on each track's MIDI channel, with or without a computer. NOT SENDING: the UART did not answer; set it again to retry |
+| BEND RANGE | K6 | the pitch wheel on the internal sounds (the selected synth track): ±1, 2, 3, 4, 5, 7 or 12 semitones, default 7 (as before). MIDI IN's pitch bend has its own (GLO > MIDI 2 > BEND) |
+
+The jack is a MIDI **OUT** (UART1 on PC7, 31250 baud; there is no MIDI IN on the SMK-37). Connect it with a
+TRS-to-DIN MIDI adapter. The SMK-37 is listed with a **type A** TRS jack (a community spec sheet; M-Vave's manual
+only says "a 3.5 mm to MIDI adapter", and it has not been measured): if a synth does not respond, try a type B
+adapter.
+
+## Hardware calibration
+
+OCTAVE− + OCTAVE+ held at power-on (or HOME menu > SYSTEM > HARDWARE CALIBRATION): press each button and turn each
+knob as the screen names it (K2 SELECT, K3 ALGORITHM, K4 PRESETS, K5–K8), then the wheels, OCTAVE+ taking each step:
+
+1. PITCH WHEEL, LET IT REST (its noise sets the dead band)
+2. PITCH WHEEL, FULL DOWN (hold it there)
+3. PITCH WHEEL, FULL UP
+4. MOD WHEEL, AT THE BOTTOM
+5. MOD WHEEL, FULL UP
+
+The screen shows the wheel's reading. The full travel then gives the full range (BEND RANGE, mod 0–127); at
+power-on a pitch wheel resting near its taught rest is re-centred. 30 s without OCTAVE+ (or too little travel)
+keeps the wheels as they were. Kept in flash with the settings (0xB1000 / 0xB2000); without it, or after updating,
+the wheels calibrate themselves as before.
+
 ## The pad sound picker
 
 Turning K4 (PRESETS) shows the sounds of the selected track's kind on the 16 pads and on the screen (8 × 2), in the
@@ -119,7 +149,7 @@ FADER BANK closes it (one screen at a time).
 | Combo | Does |
 |---|---|
 | OCTAVE− held at power-on | USB rescue |
-| OCTAVE− + OCTAVE+ held at power-on | hardware calibration (re-teach buttons and knobs) |
+| OCTAVE− + OCTAVE+ held at power-on | hardware calibration (re-teach buttons, knobs and the wheels) |
 | OCTAVE− + OCTAVE+ held 5 s, stopped | update mode (UBOOT) |
 
 ## Safety
@@ -132,5 +162,5 @@ FADER BANK closes it (one screen at a time).
   be recreated. The firmware and its update loader write only an explicit allow-list of flash ranges (checked at
   compile time and again in the flash driver), but a manual UBOOT write can; restore only the ranges you need.
 - `FELUCCA_UART` must stay 0 on the SMK-37 (PH8, the FM-1's MIDI IN, is a key-matrix row there): the build refuses
-  otherwise.
+  otherwise. The SMK-37's TRS MIDI OUT is its own driver (`firmware/hal/smk_uart_tx.h`, `firmware/src/smk_midi_out.h`).
 - Power the keyboard from a reliable USB port during an update and do not unplug it while the update screen is up.
