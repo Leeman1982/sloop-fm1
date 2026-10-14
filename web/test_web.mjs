@@ -1697,6 +1697,25 @@ async function portNames() {
   ok(pn(acc(["Arturia KeyStep Pro", "loopMIDI Port"])) === "", "editor: no FM-1 name: nothing to try");
 }
 
+await editorMock();
+await editorLibrarian();
+await editorLive();
+await editorTracks();
+await editorSetGate();
+await editorMixer();
+await editorTrackParam();
+await editorV5();
+await editorV7();
+await editorV8();
+await editorV9();
+await editorBackup();
+await editor25();
+await editorDsyn();
+await editorCart();
+editorTabs();
+editorIcons();
+samplesMatch();
+chopTests();
 await packages();
 await updater();
 await stockReturn();
