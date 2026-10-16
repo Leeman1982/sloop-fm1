@@ -142,10 +142,12 @@ class FakeFM1:
 
 # ----------------------------------------------------------------- helpers ---
 
-def package(product="FM-1_900", marker=True, size=0x2000, damage=False, blocks=20, seed=7):
+def package(product="FM-1_900", marker=True, size=0x2000, damage=False, blocks=20, seed=7, patch=None):
     """a package with a valid header and file list (one file: 0x400 to the end), as fm1pkg_make writes"""
     img = bytearray((i * seed) & 0xFF for i in range(size))
     img[0x1800:0x1800 + 16] = I.LOADER_MARK if marker else bytes(16)
+    for at, b in (patch or {}).items():
+        img[at:at + len(b)] = b
     data = bytes(img[0x400:])
     e = bytearray(0x50)
     e[0:16] = (0).to_bytes(2, "little") + (0).to_bytes(2, "little") + I._crc16(data).to_bytes(2, "little") + bytes(2) + \
@@ -280,7 +282,7 @@ def errors():
     rc, out, err = cli([plain, "--yes"], dev)
     ok(rc == 2 and "no Felucca update loader" in err and dev.sent == [], "package without the loader marker -> exit 2, no MIDI")
     dev = FakeFM1(I.logical_image(package(marker=False)))
-    rc, out, err = cli([plain, "--yes", "--force"], dev)
+    rc, out, err = cli([plain, "--yes", "--force", "--fm1"], dev)
     ok(rc == 0 and dev.bad == 0, "... installs with --force")
     dev = FakeFM1(image)
     rc, out, err = cli([pkgfile("damaged.fwsc", package(damage=True)), "--yes"], dev)
@@ -371,6 +373,76 @@ def smk():
            f"FM-1 package {clean.name} still parses: 20 blocks, {I.product_of(raw)}")
 
 
+def table(board):
+    """a region table with the board's addresses (as the stock packer lays it out), SFC-enciphered"""
+    recs = {"smk": [("VM", 0x9D000, 0x23000), ("PRCT", 0, 0x9D000), ("BTIF", 0xC0000, 0x1000), ("USRTRIM", 0xC1000, 0x1000),
+                    ("USRFLASH", 0xC2000, 0x29000), ("USR", 0xF4000, 0xA000)],
+            "fm1": [("VM", 0x93000, 0x56000), ("PRCT", 0, 0x93000), ("BTIF", 0xE9000, 0x1000), ("USR", 0xEA000, 0x12000)]}[board]
+    t = bytearray(b"\xff" * 0xC0)
+    for i, (name, addr, size) in enumerate(recs):
+        r = bytearray(b"\xff" * 32)
+        r[4:12] = addr.to_bytes(4, "little") + size.to_bytes(4, "little")
+        r[16:17 + len(name)] = name.encode() + b"\0"
+        t[i * 32:(i + 1) * 32] = r
+    return I._sfc(bytes(t), 0x60)
+
+
+def boards():
+    """the package's board from its contents, not from an identity: an FM-1 stock package never reaches an SMK-37"""
+    smk_raw = package("SMK-37 Pro_016", marker=False, size=0x400 + 0x9D000, patch={0x4460: table("smk")})
+    fm1_raw = package("FM-1_015", marker=False, size=0x400 + 0x93000, patch={0x4460: table("fm1")})
+    fake_raw = package("SMK-37 Pro_016", marker=False, size=0x400 + 0x93000, patch={0x4460: table("fm1")})
+    smk_img, fm1_img, fake_img = I.logical_image(smk_raw), I.logical_image(fm1_raw), I.logical_image(fake_raw)
+    ours = I.logical_image(package("SMK-37 Pro_900"))
+    ok(I.package_board(smk_img) == "smk" and I.package_board(fm1_img) == "fm1" and I.package_board(fake_img) == "fm1"
+       and I.package_board(ours) is None and I.region_table(smk_img[0x400:])["BTIF"] == (0xC0000, 0x1000),
+       "package_board: SMK-37 / FM-1 layouts by flash.bin and region table")
+    ok(I.is_stock(smk_img) and I.is_stock(fm1_img) and not I.is_stock(ours), "is_stock: no SLOOP loader in the package")
+    p_smk, p_fm1, p_fake = (pkgfile(n, r) for n, r in (("smkstock.fwsc", smk_raw), ("fm1stock.fwsc", fm1_raw),
+                                                         ("fake.fwsc", fake_raw)))
+    smk_dev = dict(name="SMK-37 Pro Midi", loader=("ota-SMK-37 Pro_016", "SMK-37 Pro Midi"))
+    dev = FakeFM1(fm1_img, identity="SMK-37 Pro_016", **smk_dev)
+    rc, out, err = cli([p_fm1, "--yes", "--force", "--fm1"], dev)
+    ok(rc == 6 and dev.upgrades == 0 and "This is the FM-1 firmware" in err,
+       "FM-1 stock package on an SMK-37 -> exit 6, nothing sent (--fm1 or not)")
+    dev = FakeFM1(fake_img, identity="SMK-37 Pro_016", **smk_dev)
+    rc, out, err = cli([p_fake, "--yes", "--force"], dev)
+    ok(rc == 6 and dev.upgrades == 0 and "This is the FM-1 firmware" in err,
+       "... named SMK-37 Pro_016: refused by its contents")
+    dev = FakeFM1(fm1_img, identity="ota-SMK-37 Pro_016", name="SMK-37 Pro Midi")
+    rc, out, err = cli([p_fm1, "--yes", "--force", "--fm1"], dev)
+    ok(rc == 6 and dev.upgrades == 0 and "FM-1 firmware" in err, "... on an SMK-37 in update mode -> exit 6, nothing sent")
+    small = pkgfile("smkodd.fwsc", package("SMK-37 Pro_016", marker=False))
+    dev = FakeFM1(I.logical_image(package("SMK-37 Pro_016", marker=False)), identity="SMK-37 Pro_016", **smk_dev)
+    rc, out, err = cli([small, "--yes", "--force"], dev)
+    ok(rc == 6 and dev.upgrades == 0 and "not laid out for the SMK-37" in err, "a stock package of another layout on an SMK-37 -> exit 6")
+    dev = FakeFM1(smk_img, identity="SMK-37 Pro_016", after_write="SMK-37 Pro_016", **smk_dev)
+    rc, out, err = cli([p_smk, "--yes", "--force"], dev)
+    ok(rc == 0 and dev.bad == 0 and dev.upgrades == 2, "the SMK-37 stock package on an SMK-37 installs")
+    # a device that reports an FM-1 may be an SMK-37 under a third-party FM-1 firmware: the user says which
+    dev = FakeFM1(fm1_img)
+    rc, out, err = cli([p_fm1, "--yes", "--force"], dev)
+    ok(rc == 6 and dev.upgrades == 0 and "use the SMK-37 package" in err and "--fm1" in err,
+       "FM-1 stock package on a device reporting FM-1, --yes without --fm1 -> exit 6")
+    dev = FakeFM1(fm1_img)
+    out, old, sys.stderr = io.StringIO(), sys.stderr, io.StringIO()
+    try:
+        rc = I.main([p_fm1, "--force"], backend=dev, out=out, ask=lambda q: not q.startswith("Is the device an FM-1"))
+    finally:
+        sys.stderr = old
+    ok(rc == 6 and dev.upgrades == 0 and "Your keyboard is an SMK-37?" in out.getvalue(),
+       "... asked, the user says it is not an FM-1 -> exit 6, nothing sent")
+    dev = FakeFM1(fm1_img, after_write="FM-1_015")
+    rc, out, err = cli([p_fm1, "--force"], dev, answer=True)
+    ok(rc == 0 and dev.bad == 0, "... asked, the user says it is an FM-1 -> installed")
+    dev = FakeFM1(fm1_img, after_write="FM-1_015")
+    rc, out, err = cli([p_fm1, "--yes", "--force", "--fm1"], dev)
+    ok(rc == 0 and dev.bad == 0, "... --fm1 -> installed")
+    dev = FakeFM1(smk_img)
+    rc, out, err = cli([p_smk, "--yes", "--force"], dev)
+    ok(rc == 6 and dev.upgrades == 0, "the SMK-37 stock package on an FM-1 -> exit 6 (wrong model)")
+
+
 def against_js():
     clean = ROOT / "build/felucca.fwsc"
     if not shutil.which("node") or not clean.exists():
@@ -390,6 +462,7 @@ wire()
 installs()
 errors()
 smk()
+boards()
 against_js()
 shutil.rmtree(TMP, ignore_errors=True)
 # the SMK-37 Pro, Elite and MKE-P37 are one keyboard: packages install across them, never across FM-1 / SMK

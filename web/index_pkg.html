@@ -278,12 +278,18 @@ $("stock-file").addEventListener("change", async () => {
   stock = null;
   lockAll(writing);
   if (!f) return;
-  try { stock = await validateStockPackage(new Uint8Array(await f.arrayBuffer())); sayK("stockValid"); }
+  try {
+    stock = await validateStockPackage(new Uint8Array(await f.arrayBuffer()));
+    sayK("stockValid");
+    if (packageBoard(stock.image) !== "smk") $("status").textContent += " — " + FM1_STOCK_MSG;   // (the FM-1's layout)
+  }
   catch (e) { sayK("stockBad", e.message); }
   lockAll(writing);
 });
 $("stock-go").addEventListener("click", async () => {
   if (writing || !stock || !$("stock-saved").checked || !confirm(t("stockConfirm"))) return;
+  // not the SMK-37's layout (the FM-1's): only on a device the user says is an FM-1 (fm1ota.js boardRefusal)
+  const fm1Confirmed = packageBoard(stock.image) !== "smk" && confirm(FM1_CONFIRM_MSG + "\n\nOK: the device is an FM-1.");
   lockAll(true);
   let midi;
   try { midi = await navigator.requestMIDIAccess({ sysex: true }); }
@@ -294,9 +300,9 @@ $("stock-go").addEventListener("click", async () => {
     if (ota) {
       ota.link.close();
       if (OUR_LOADER(ota.id)) sayK("stockFinish");    /* SLOOP's loader: finish SLOOP first (Install) */
-      else sayK((await up.resume(stock.image, step, { product: stock.product })) ? "done" : "stopped");
+      else sayK((await up.resume(stock.image, step, { product: stock.product, fm1Confirmed })) ? "done" : "stopped");
     } else {
-      await up.install(stock.image, stock.product, step);
+      await up.install(stock.image, stock.product, step, false, { fm1Confirmed });
     }
   } catch (e) { failed(e); }
   lockAll(false);

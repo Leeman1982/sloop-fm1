@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { blockCount, logicalImage, productOf, validateStockPackage, identifyStockPackage, STOCK_SMK } from "./fm1pkg.js";
-import { Updater, pack7, unpack7, sameKeyboard, OUR_LOADER, OTHER_SMK, PORT_RE, stockFit } from "./fm1ota.js";
+import { Updater, pack7, unpack7, sameKeyboard, OUR_LOADER, OTHER_SMK, PORT_RE, stockFit, packageBoard, isStockPackage, regionTable, FM1_STOCK_MSG } from "./fm1ota.js";
 
 let failed = 0;
 const ok = (cond, what) => { console.log(`${what.padEnd(64)} ${cond ? "ok" : "FAIL"}`); if (!cond) failed++; };
@@ -1756,6 +1756,88 @@ async function editorDaw() {
     "daw: the DAW MAP tab only for a device that answers DAW_GET");
 }
 
+/* ------------------------------------------- the package's board (fm1ota.js) --- */
+const cipherUfw = (b) => { const o = Uint8Array.from(b); for (let i = 0, k = 0xFFFF; i < o.length; i++) { o[i] ^= k & 0xFF; k = ((k << 1) ^ (k & 0x8000 ? 0x1021 : 0)) & 0xFFFF; } return o; };
+function cipherSfc(b, base) {
+  const o = Uint8Array.from(b);
+  for (let i = 0; i < o.length; i += 32) {
+    let k = (0x980F ^ ((base + i) >>> 2)) & 0xFFFF;
+    for (let j = i; j < i + 32 && j < o.length; j++) { o[j] ^= k & 0xFF; k = ((k << 1) ^ (k & 0x8000 ? 0x1021 : 0)) & 0xFFFF; }
+  }
+  return o;
+}
+// a stock-like package (synthetic: a region table with the board's addresses, as the stock packer lays it out;
+// usr: a USR image entry [target, size]; ours: our loader's marker in it)
+function synthStock(flLen, board, usr = null, ours = false) {
+  const recs = { smk: [["VM", 0x9D000, 0x23000], ["PRCT", 0, 0x9D000], ["BTIF", 0xC0000, 0x1000], ["USRTRIM", 0xC1000, 0x1000],
+                       ["USRFLASH", 0xC2000, 0x29000], ["USR", 0xF4000, 0xA000]],
+                 fm1: [["VM", 0x93000, 0x56000], ["PRCT", 0, 0x93000], ["BTIF", 0xE9000, 0x1000], ["USR", 0xEA000, 0x12000]] }[board];
+  const w32 = (a, o, v) => { for (let k = 0; k < 4; k++) a[o + k] = (v >>> (8 * k)) & 0xFF; };
+  const img = new Uint8Array(0x400 + flLen), t = new Uint8Array(0xC0).fill(0xFF);
+  recs.forEach(([name, addr, size], i) => {
+    w32(t, i * 32 + 4, addr); w32(t, i * 32 + 8, size);
+    [...name].forEach((c, k) => { t[i * 32 + 16 + k] = c.charCodeAt(0); });
+    t[i * 32 + 16 + name.length] = 0;
+  });
+  img.set(cipherSfc(t, 0x60), 0x400 + 0x4060);
+  if (ours) img.set([..."FELUCCA-LOADER-1"].map((c) => c.charCodeAt(0)), 0x400 + 0x5000);
+  const ents = [[0, 0x400, flLen, 0, 0], ...(usr ? [[50, 0x400, 0x100, usr[0], usr[1]]] : [])];
+  const h = new Uint8Array(0x40);
+  h[8] = ents.length;
+  img.set(cipherUfw(h), 0);
+  ents.forEach(([type, off, size, at, len], i) => {
+    const e = new Uint8Array(0x50);
+    e[0] = type; w32(e, 8, off); w32(e, 12, size); w32(e, 0x1C, at); w32(e, 0x20, len);
+    img.set(cipherUfw(e), 0x40 + i * 0x50);
+  });
+  return img;
+}
+
+async function boards() {
+  const anyModel = /anyModel/.test(Updater.prototype.install.toString());
+  const inst = (up, img, prod, opts = {}) => (anyModel ? up.install(img, prod, null, false, opts) : up.install(img, prod, null, opts));
+  const caught = (p) => p.then(() => null, (x) => x);
+  const positional = /product = null/.test(Updater.prototype.resume.toString());   // (resume(image, onStep, product, opts))
+  const res = (up, img, product, opts = {}) => (positional ? up.resume(img, null, product, opts) : up.resume(img, null, { product, ...opts }));
+  const smk = synthStock(0x9D000, "smk"), fm1 = synthStock(0x93000, "fm1");
+  ok(packageBoard(smk) === "smk" && packageBoard(fm1) === "fm1" && packageBoard(synthStock(0x9D000, "smk", [0xEA000, 0x12000])) === "fm1" &&
+     packageBoard(synthStock(0x9D000, "smk", [0xF4000, 0xA000])) === "smk" && packageBoard(synthStock(0x9C000, "smk")) === null &&
+     packageBoard(new Uint8Array(0x2000)) === null, "fm1ota.js: packageBoard: flash.bin length, region table, USR image");
+  ok(regionTable(smk.subarray(0x400)).BTIF[0] === 0xC0000 && regionTable(fm1.subarray(0x400)).USR[0] === 0xEA000 &&
+     isStockPackage(fm1) && !isStockPackage(synthStock(0x9D000, "smk", null, true)), "fm1ota.js: region table deciphered; stock = not our loader");
+  // a fake device that reports identity on the port name (via boot(), which every FakeFM1 has)
+  const dev = (img, identity, name, fin) => { const x = new FakeFM1(img, fin ? { finalIdentity: fin } : {}); if (identity) x.boot(identity, name); return x; };
+  // past the board check: the device was served (the fakes differ in what they boot afterwards)
+  const written = (g, fin, x) => (g === fin || !(g && ["fm1pkg", "board", "fm1confirm"].includes(g.code))) && x.served > 0 && x.bad === 0;
+  let d = dev(fm1, "SMK-37 Pro_016", "SMK-37 Pro");
+  let e = await caught(inst(new Updater(d.access), fm1, "FM-1_015", { fm1Confirmed: true }));
+  ok(e && e.code === "fm1pkg" && d.served === 0 && e.message.includes(FM1_STOCK_MSG), "fm1ota.js: FM-1 stock package on an SMK-37 -> 'fm1pkg', nothing sent");
+  d = dev(fm1, "SMK-37 Pro_016", "SMK-37 Pro");
+  e = await caught(inst(new Updater(d.access), fm1, "SMK-37 Pro_016"));
+  ok(e && e.code === "fm1pkg" && d.served === 0, "fm1ota.js: ... named SMK-37 Pro_016: refused by its contents");
+  d = dev(fm1, "ota-SMK-37 Pro_016", "SMK-37 Pro");
+  e = await res(new Updater(d.access), fm1, "FM-1_015", { fm1Confirmed: true }).then((x) => x, (x) => x);
+  ok((e === false || (e && e.code === "fm1pkg")) && d.served === 0, "fm1ota.js: ... on an SMK-37 in update mode -> not written");
+  const odd = synthStock(0x9C000, "smk");
+  d = dev(odd, "SMK-37 Pro_016", "SMK-37 Pro");
+  e = await caught(inst(new Updater(d.access), odd, "SMK-37 Pro_016"));
+  ok(e && e.code === "board" && d.served === 0, "fm1ota.js: a stock package of another layout on an SMK-37 -> 'board'");
+  /* a device that reports an FM-1 may be an SMK-37 under a third-party FM-1 firmware: the user confirms */
+  d = dev(fm1, "FM-1_015", "FM-1");
+  e = await caught(inst(new Updater(d.access), fm1, "FM-1_015"));
+  ok(e && e.code === "fm1confirm" && d.served === 0 && /SMK-37 package/.test(e.message),
+     "fm1ota.js: FM-1 stock package on a device reporting FM-1, unconfirmed -> 'fm1confirm'");
+  d = dev(fm1, "FM-1_015", "FM-1", "FM-1_015");
+  const g = await inst(new Updater(d.access), fm1, "FM-1_015", { fm1Confirmed: true }).then((x) => x, (x) => x);
+  ok(written(g, "FM-1_015", d), "fm1ota.js: ... confirmed as an FM-1 -> written");
+  d = dev(fm1, "ota-FM-1_015", "FM-1 Update", "FM-1_015");
+  e = await caught(res(new Updater(d.access), fm1, "FM-1_015"));
+  ok(e && e.code === "fm1confirm" && d.served === 0, "fm1ota.js: ... the official loader resumed: the same confirmation");
+  d = dev(smk, "SMK-37 Pro_016", "SMK-37 Pro", "SMK-37 Pro_016");
+  const g2 = await inst(new Updater(d.access), smk, "SMK-37 Pro_016").then((x) => x, (x) => x);
+  ok(written(g2, "SMK-37 Pro_016", d), "fm1ota.js: the SMK-37 stock package on an SMK-37 -> written");
+}
+
 await editorMock();
 await editorLibrarian();
 await editorLive();
@@ -1778,6 +1860,7 @@ chopTests();
 await editorDaw();
 await packages();
 await updater();
+await boards();
 await stockReturn();
 longIdentity();
 await portNames();

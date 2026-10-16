@@ -211,12 +211,14 @@ export class Updater {
 
   // full install: running firmware -> loader -> new firmware. anyModel: the package may be for another model of the
   // same keyboard (an SMK-37 Elite package on a unit that reports SMK-37 Pro); never an FM-1 one on an SMK, nor back
-  async install(image, product, onStep, anyModel = false) {
+  async install(image, product, onStep, anyModel = false, opts = {}) {
     const step = onStep || (() => {});
     const dev = await this.find((id) => !IS_OTA(id));
     if (!dev) throw fail("notfound", "FM-1 not found (USB cable, and no other app using it?)", this.seen());
     if (OTHER_SMK(dev.id)) { dev.link.close(); throw fail("other", `the keyboard runs a firmware with its own updater (${dev.id.text}): nothing was sent`, dev.id.text); }
     const [model] = product.split("_");
+    const refusal = boardRefusal(dev.id.model, image, opts.fm1Confirmed);   // (the package's board, before anything)
+    if (refusal) { dev.link.close(); throw refusal; }
     if (dev.id.model !== model && !(anyModel && sameKeyboard(dev.id.model, model))) { dev.link.close(); throw fail("model", `the device is ${dev.id.text}, the package is for ${product}`); }
     step("start", dev.id.text);
     dev.link.send(UPGRADE);
@@ -270,6 +272,8 @@ export class Updater {
       throw fail("foreign", `the FM-1 is in the update mode of another firmware (${ota.id.text}): finish that update with its own updater`, ota.id.text);
     }
     const want = opts.product || opts.package || "";
+    const refusal = boardRefusal(ota.id.model, image, opts.fm1Confirmed);
+    if (refusal) { ota.link.close(); throw refusal; }
     const [lm, pm] = [ota.id.model.replace(/^ota-/i, ""), want.split("_")[0]];
     if (!want || (lm !== pm && !(opts.anyModel && sameKeyboard(lm, pm)))) {
       ota.link.close();
@@ -288,4 +292,88 @@ export class Updater {
     }
     return true;
   }
+}
+
+// ---- the package's board: read from the package itself, never from an identity ----
+// The FM-1's and the SMK-37's official packages share the head (0x0-0x3FFF) and the update loader, and a third-party
+// FM-1 firmware running on an SMK-37 reports an FM-1 identity: no identity tells the board. Installed on an SMK-37,
+// the FM-1's stock package erases the factory calibration (BTIF / USRTRIM 0xC0000-0xC1FFF) and writes the FM-1's
+// USR image over the SMK's (0xF4000). So the board comes from the package: flash.bin's length (SMK-37 0x9D000,
+// FM-1 0x93000), its region table (app offset 0x60 = flash 0x4060-0x411F, SFC-enciphered with the chip key 0x980F:
+// BTIF and USR at 0xC0000 / 0xF4000 on the SMK-37, 0xE9000 / 0xEA000 on the FM-1) and a USR image's place (UFW
+// entry 50).
+export const FM1_STOCK_MSG = "This is the FM-1 firmware. Your keyboard is an SMK-37? Don't install it.";
+export const FM1_CONFIRM_MSG = FM1_STOCK_MSG + " On an SMK-37 it erases the keyboard's calibration. Install it only on an FM-1." +
+  " SMK-37 owners whose keyboard runs an FM-1 firmware (it then reports an FM-1): use the SMK-37 package from M-Vave, never this one.";
+const LAYOUT = { smk: { len: 0x9D000, btif: 0xC0000, usr: [0xF4000, 0xA000] }, fm1: { len: 0x93000, btif: 0xE9000, usr: [0xEA000, 0x12000] } };
+const LOADER_MARK = [..."FELUCCA-LOADER-1"].map((c) => c.charCodeAt(0));   // our update loaders (crt0_ldr.S)
+const SMK_MODEL = /^(ota-)?(SMK-37([ +].*)?|MKE-P37|STARRYKEY-37.*)$/i;      // an identity of the SMK-37 keyboard
+const le = (a, o, n) => { let v = 0; for (let i = n - 1; i >= 0; i--) v = v * 256 + a[o + i]; return v; };
+function ufwCipher(b) {                    // the UFW header cipher (key 0xFFFF, its own inverse)
+  const out = Uint8Array.from(b);
+  for (let i = 0, k = 0xFFFF; i < out.length; i++) { out[i] ^= k & 0xFF; k = ((k << 1) ^ (k & 0x8000 ? 0x1021 : 0)) & 0xFFFF; }
+  return out;
+}
+function sfcCipher(b, base, key = 0x980F) {   // the JieLi SFC cipher of the app area (32-byte blocks, its own inverse)
+  const out = Uint8Array.from(b);
+  for (let i = 0; i < out.length; i += 32) {
+    let k = (key ^ ((base + i) >>> 2)) & 0xFFFF;
+    for (let j = i; j < i + 32 && j < out.length; j++) { out[j] ^= k & 0xFF; k = ((k << 1) ^ (k & 0x8000 ? 0x1021 : 0)) & 0xFFFF; }
+  }
+  return out;
+}
+// the package's files: { type, off, size, at, len } (at / len: where a USR image goes)
+export function packageFiles(image) {
+  if (image.length < 0x40) return [];
+  const h = ufwCipher(image.subarray(0, 0x40)), n = le(h, 8, 2), out = [];
+  for (let i = 0; i < n && i < 11 && 0x90 + i * 0x50 <= image.length; i++) {
+    const e = ufwCipher(image.subarray(0x40 + i * 0x50, 0x90 + i * 0x50));
+    out.push({ type: le(e, 0, 2), off: le(e, 8, 4), size: le(e, 12, 4), at: le(e, 0x1C, 4), len: le(e, 0x20, 4) });
+  }
+  return out;
+}
+// flash.bin's region table: { VM: [address, size], PRCT, BTIF, USR, ... }
+export function regionTable(flash) {
+  const t = {};
+  if (flash.length < 0x4120) return t;
+  const d = sfcCipher(flash.subarray(0x4060, 0x4120), 0x60);
+  for (let r = 0; r < 0xC0; r += 32) {
+    let name = "";
+    for (let i = 16; i < 32 && d[r + i] > 0x20 && d[r + i] < 0x7F; i++) name += String.fromCharCode(d[r + i]);
+    if (name) t[name] = [le(d, r + 4, 4), le(d, r + 8, 4)];
+  }
+  return t;
+}
+// "smk", "fm1" (any sign of the FM-1's layout) or null (not a package, or another layout)
+export function packageBoard(image) {
+  const files = packageFiles(image), fl = files.find((f) => f.type === 0);
+  if (!fl || fl.off + fl.size > image.length) return null;
+  const rt = regionTable(image.subarray(fl.off, fl.off + fl.size)), usr = files.filter((f) => f.type === 50);
+  const S = LAYOUT.smk, F = LAYOUT.fm1;
+  if (fl.size === S.len && rt.BTIF && rt.BTIF[0] === S.btif && rt.USR && rt.USR[0] === S.usr[0] && rt.USR[1] === S.usr[1] &&
+      usr.every((u) => u.at === S.usr[0] && u.len === S.usr[1])) return "smk";
+  if (fl.size === F.len || (rt.BTIF && rt.BTIF[0] === F.btif) || (rt.USR && rt.USR[0] === F.usr[0]) || usr.some((u) => u.at === F.usr[0])) return "fm1";
+  return null;
+}
+function hasOurLoader(image) {
+  const m = LOADER_MARK;
+  for (let i = image.indexOf(m[0]); i >= 0 && i + m.length <= image.length; i = image.indexOf(m[0], i + 1)) {
+    let j = 1;
+    while (j < m.length && image[i + j] === m[j]) j++;
+    if (j === m.length) return true;
+  }
+  return false;
+}
+// a stock package (M-Vave's, or any without our update loader): one with flash.bin whose loader is not ours
+export const isStockPackage = (image) => packageFiles(image).some((f) => f.type === 0) && !hasOurLoader(image);
+// null, or why image must not be written to a device that reports model (an Error with a code, nothing sent yet):
+// "fm1pkg" an FM-1 layout for an SMK-37; "board" a stock package not laid out for the SMK-37 on one; "fm1confirm" a
+// stock package not laid out for the SMK-37 on a device that reports another model (an FM-1, or an SMK-37 under an
+// FM-1 firmware): only when the user confirmed the device is an FM-1 (fm1Confirmed)
+export function boardRefusal(model, image, fm1Confirmed = false) {
+  const board = packageBoard(image), smk = SMK_MODEL.test(model);
+  if (smk && board === "fm1") return fail("fm1pkg", `${FM1_STOCK_MSG} (The device reports ${model}.) Nothing was sent.`);
+  if (!isStockPackage(image) || board === "smk") return null;
+  if (smk) return fail("board", `this package is not laid out for the SMK-37 (flash.bin, region table): nothing was sent`);
+  return fm1Confirmed ? null : fail("fm1confirm", FM1_CONFIRM_MSG);
 }
