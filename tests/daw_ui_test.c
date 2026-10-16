@@ -221,7 +221,9 @@ int main(int argc, char **argv)
     check(ui.menu == 1 && ui.menu_sel == MI_TRS, "PATCH held: the menu, at MIDI");
     shot("daw-menu-midi");
     check(MS_FIRST[MS_PLAY] == MI_VEL && MS_FIRST[MS_MIDI] == MI_TRS && MS_FIRST[MS_DAW] == MI_DMAP && MI_LOCAL - MI_TRS == 3 &&
-          MI_DRESET - MI_DMAP == 3 && MI_BDN - MI_VEL == 2, "PLAY: KEY VELOCITY, BEND UP, BEND DOWN; MIDI: TRS, MODE, CHANNEL, LOCAL; DAW: 4");
+          MI_DRESET - MI_DMAP == 3 && MI_BDN - MI_VEL == 2 && MI_ACCEL == MI_BDN + 1 && MS_FIRST[MS_MIDI] - MS_FIRST[MS_PLAY] == 4 &&
+          MI_KLAY == MI_ZOOM + 1 && MI_LIMIT - MS_FIRST[MS_AUDIO] == 3,
+          "PLAY: KEY VELOCITY, BEND UP, BEND DOWN, KNOB ACCEL (2.7); MIDI: TRS, MODE, CHANNEL, LOCAL; DAW: 4; KNOB LAYOUT, LIMITER on their knobs");
     for (i = 0; i < MS_COUNT; i++)
         if (MS_FIRST[i + 1] - MS_FIRST[i] > 4u || MS_FIRST[i + 1] <= MS_FIRST[i])
             check(0, "a section of 1..4 rows");

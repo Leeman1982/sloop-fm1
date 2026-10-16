@@ -151,6 +151,9 @@ static volatile struct {
     uint32_t adc_ok, adc_miss;   /* (debug: conversions read / not finished within a tick) */
     uint32_t frames;
 } fm1_in;
+/* SLOOP 2.7: buttons held over MIDI (GLO > MIDI 3 > REMOTE: src/ui_input.c remote_poll), bit i = button i: read as
+ * closed by the debounce (smk__buttons), as fm1_input.h does */
+static volatile uint32_t fm1_remote_btn;
 
 /* key events beyond the FM-1's 27 (keybed keys 0..4 and 32..36): key << 8 | velocity (0 = release) */
 #define SMK_EXTQ 32u
@@ -377,6 +380,8 @@ static void smk__buttons(void)
     for (i = 0; i < FM1_NBTN; i++) {
         uint32_t closed = smk__closed(SMK_BTNC[i]), bit = 1u << i, on = (fm1_in.buttons & bit) != 0u;
         volatile uint8_t *c = &fm1_in.cnt[i];
+        if (fm1_remote_btn & bit)
+            closed = 1;                                /* (2.7) held over MIDI */
         if (closed == on) {
             *c = 0;
             continue;

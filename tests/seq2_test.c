@@ -1110,6 +1110,189 @@ static void t_micro(void)
     for (i = 0; i < 16u; i++) TDRUM->micro[i] = 0;
 }
 
+/* SLOOP 2.7: REC screen QUANT OFF: a note played off the grid goes into the nearest step as ever, its distance from
+ * the grid (as heard: REC_LAT earlier) becomes the step's nudge; QUANT ON leaves the nudge alone; a second note on the
+ * step keeps the first one's; the arp stays on its grid; the free take too; undo takes the nudges back */
+static void t_recquant(void)
+{
+    double sb = (double)FS * 60.0 / 120.0 / 4.0 / CTL, lat = (double)REC_LAT / CTL;   /* blocks: a 1/16 step, the latency */
+    uint32_t into, slen, k;
+    track_t *d = TDRUM, *s = &trk[0];
+    int ok;
+    /* run until step `st` of the drum track starts, then `frac` of a step and the latency more (frac < 0: before it) */
+    #define GO_TO(st, frac) do { uint32_t b_ = (frac) < 0 ? (uint32_t)(st) - 1u : (uint32_t)(st); \
+        while (trk_grid(d, &into, &slen) != b_) run_block(); \
+        for (k = 0; k < (uint32_t)(((frac) < 0 ? 1.0 + (frac) : (frac)) * sb + lat + 0.5); k++) run_block(); } while (0)
+    reset(120);
+    rec_quant_off = 1;
+    song.rec = 1u << TRK_DRUM;
+    transport_req = 1;
+    run_block();
+    GO_TO(2, 0.25);                                  /* a quarter step late on step 3 */
+    drum_input(0, LV_NORM, 0, 1);
+    ok = d->dstep[2].on[0] & 1u;
+    k = (uint32_t)(d->micro[2] + 64);
+    ok &= d->micro[2] >= 15 && d->micro[2] <= 17;
+    drum_input(3, LV_NORM, 0, 1);                    /* a second sound a little later on that step: the first's nudge */
+    ok &= d->micro[2] >= 15 && d->micro[2] <= 17 && (d->dstep[2].on[0] & 8u);
+    check(ok, "2.7 QUANT OFF: a hit a quarter step late: step 3, nudge +16; a second sound on it keeps it");
+    GO_TO(6, -0.25);                                 /* a quarter step early, before step 7 */
+    drum_input(1, LV_NORM, 0, 1);
+    check((d->dstep[6].on[0] & 2u) && d->micro[6] >= -17 && d->micro[6] <= -15 && !(d->dstep[5].on[0] & 2u),
+          "2.7 QUANT OFF: a hit a quarter step early: into the next step (7), nudge -16");
+    rec_quant_off = 0;
+    GO_TO(10, 0.25);
+    drum_input(0, LV_NORM, 0, 1);
+    check((d->dstep[10].on[0] & 1u) && d->micro[10] == 0, "2.7 QUANT ON (as before): on the grid, no nudge");
+    transport_req = 2; run_block();
+    /* a synth part, played by hand (input_on) and by the arp */
+    reset(120);
+    rec_quant_off = 1;
+    song.sel = 0;
+    song.rec = 1u << 0;
+    transport_req = 1;
+    run_block();
+    while (trk_grid(s, &into, &slen) != 4u) run_block();
+    for (k = 0; k < (uint32_t)(sb / 8.0 + lat + 0.5); k++) run_block();   /* an eighth of a step late on step 5 */
+    input_on(s, 60, 100);
+    ok = s->step[4].time == ST_NOTE && s->micro[4] >= 7 && s->micro[4] <= 9;
+    undo_mark(s, 12345u);
+    s->micro[4] = 0;                                 /* (undo: the marked nudges back) */
+    ok &= undo.micro[4] >= 7 && undo.micro[4] <= 9;
+    check(ok, "2.7 QUANT OFF: a played note an eighth step late: nudge +8; undo keeps the nudges");
+    input_off(s, 60);
+    transport_req = 2; run_block();
+    {   /* the free take (MODE free, an empty project): one bar at 120 BPM, hits on 1, a quarter late on 3, a quarter early on 7 */
+        uint32_t T = (uint32_t)(sb * 16.0 + 0.5);
+        reset(120);
+        rec_quant_off = 1;
+        ft_trk = TRK_DRUM;
+        ft_on = 1;
+        ft_t = T;
+        ft_n = 3;
+        ft_ev[0] = (ft_ev_t){0, 10, 0, LV_NORM};
+        ft_ev[1] = (ft_ev_t){(uint16_t)(2.25 * sb + 0.5), 10, 1, LV_NORM};
+        ft_ev[2] = (ft_ev_t){(uint16_t)(5.75 * sb + 0.5), 10, 2, LV_NORM};
+        ft_close();
+        ok = ft_bars == 1u && d->p[P_SLEN] == 16 && (d->dstep[0].on[0] & 1u) && d->micro[0] == 0 && (d->dstep[2].on[0] & 2u) &&
+             d->micro[2] >= 15 && d->micro[2] <= 17 && (d->dstep[6].on[0] & 4u) && d->micro[6] >= -17 && d->micro[6] <= -15;
+        if (!ok)
+            printf("seq2:   free take: bars %u len %d micro %d %d %d\n", ft_bars, d->p[P_SLEN], d->micro[0], d->micro[2], d->micro[6]);
+        check(ok, "2.7 QUANT OFF: the free take keeps the timing too (as nudges)");
+        transport_req = 2; run_block();
+    }
+    rec_quant_off = 0;
+    #undef GO_TO
+}
+
+/* SLOOP 2.7: overdub over held notes. A pad (C E held over the bar: a NOTE, then TIE steps); a note recorded on step 9
+ * over it, held one step: the pad goes on under it (not played again, not released), the new note ends after its step;
+ * held longer, its end moves along; step entry still replaces */
+static int32_t voice_of(const track_t *t, uint32_t note)   /* a gated voice playing note: its age, else -1 */
+{
+    uint32_t i;
+    for (i = 0; i < NVOICE; i++)
+        if (t->v[i].active && t->v[i].gate && t->v[i].note == note)
+            return (int32_t)t->v[i].age;
+    return -1;
+}
+static void t_overdub(void)
+{
+    track_t *t = &trk[0];
+    double sb = (double)FS * 60.0 / 120.0 / 4.0 / CTL, lat = (double)REC_LAT / CTL;
+    uint32_t into, slen, k, i;
+    int32_t a60, a64;
+    int ok;
+    reset(120);
+    t->p[P_VOICE] = V_POLY;
+    t->p[P_SLEN] = 16;
+    t->step[0].time = ST_NOTE; t->step[0].n = 2; t->step[0].note[0] = 60; t->step[0].note[1] = 64; t->step[0].vel = 100;
+    for (i = 1; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_TIE; }
+    song.sel = 0;
+    transport_req = 1;
+    run_block();
+    while (trk_grid(t, &into, &slen) != 4u) run_block();
+    a60 = voice_of(t, 60), a64 = voice_of(t, 64);
+    song.rec = 1u;                                   /* overdub, while it plays */
+    while (trk_grid(t, &into, &slen) != 8u) run_block();
+    for (k = 0; k < (uint32_t)(lat + 0.5) + 2u; k++) run_block();
+    input_on(t, 67, 100);
+    for (k = 0; k < (uint32_t)(sb * 0.6); k++) run_block();   /* held a little over half a step */
+    input_off(t, 67);
+    ok = t->step[8].time == ST_NOTE && t->step[8].n == 3 && t->step[8].note[2] == 67 && (t->step[8].flags & SF_CONT(0)) &&
+         (t->step[8].flags & SF_CONT(1)) && !(t->step[8].flags & SF_CONT(2)) && step_pure_cont(&t->step[9]) &&
+         t->step[9].n == 2 && t->step[10].time == ST_TIE;
+    check(ok, "2.7 overdub: a note over the held pad: step 9 = pad going on + the new note; step 10 its end (pad only)");
+    song.rec = 0;
+    while (trk_grid(t, &into, &slen) != 15u) run_block();      /* this bar, on: the pad still the same voices */
+    ok = a60 >= 0 && voice_of(t, 60) == a60 && voice_of(t, 64) == a64 && voice_of(t, 67) < 0;
+    check(ok, "2.7 overdub: the pad goes on under it (same voices, never cut), the new note ended");
+    while (trk_grid(t, &into, &slen) != 16u + 9u) run_block(); /* the next bar, on step 10 */
+    for (k = 0; k < 8u; k++) run_block();
+    {
+        int32_t b60 = voice_of(t, 60);
+        uint32_t has67 = voice_of(t, 67) >= 0;
+        while (trk_grid(t, &into, &slen) != 16u + 11u) run_block();
+        ok = b60 >= 0 && b60 != a60 && voice_of(t, 60) == b60 && voice_of(t, 64) >= 0 && !has67;
+    }
+    check(ok, "2.7 overdub, played back: the pad from step 1, held through steps 9-10, the new note only on 9");
+    transport_req = 2; run_block();
+    /* held three steps: its end moves to step 12 */
+    reset(120);
+    t->p[P_VOICE] = V_POLY;
+    t->p[P_SLEN] = 16;
+    t->step[0].time = ST_NOTE; t->step[0].n = 2; t->step[0].note[0] = 60; t->step[0].note[1] = 64; t->step[0].vel = 100;
+    for (i = 1; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_TIE; }
+    song.sel = 0;
+    song.rec = 1u;
+    transport_req = 1;
+    run_block();
+    while (trk_grid(t, &into, &slen) != 8u) run_block();
+    for (k = 0; k < (uint32_t)(lat + 0.5) + 2u; k++) run_block();
+    input_on(t, 67, 100);
+    while (trk_grid(t, &into, &slen) != 11u) run_block();
+    for (k = 0; k < (uint32_t)(sb * 0.7); k++) run_block();
+    input_off(t, 67);
+    ok = t->step[8].n == 3 && t->step[9].time == ST_TIE && t->step[10].time == ST_TIE && t->step[11].time == ST_TIE &&
+         step_pure_cont(&t->step[12]) && t->step[13].time == ST_TIE;
+    if (!ok)
+        for (i = 8; i < 14u; i++) printf("seq2:   step %u time %u n %u flags %02x\n", i + 1, t->step[i].time, t->step[i].n, t->step[i].flags);
+    check(ok, "2.7 overdub: held four steps: ties to step 12, its end on 13");
+    transport_req = 2; run_block();
+    /* as on the FM-1: a note recorded held over 32 steps, then an overdub pass, another note pressed on step 17 */
+    reset(120);
+    t->p[P_VOICE] = V_POLY;
+    t->p[P_SLEN] = 32;
+    song.sel = 0;
+    song.rec = 1u;
+    transport_req = 1;
+    run_block();
+    input_on(t, 60, 100);
+    while (trk_grid(t, &into, &slen) != 31u) run_block();
+    for (k = 0; k < (uint32_t)(sb * 0.8); k++) run_block();
+    input_off(t, 60);
+    song.rec = 0;
+    ok = t->step[0].time == ST_NOTE && t->step[0].note[0] == 60 && t->step[1].time == ST_TIE && t->step[31].time == ST_TIE;
+    while (trk_grid(t, &into, &slen) != 32u + 16u) run_block();
+    song.rec = 1u;
+    for (k = 0; k < 20u; k++) run_block();
+    a60 = voice_of(t, 60);
+    input_on(t, 64, 100);
+    for (k = 0; k < 3u; k++) run_block();
+    ok &= a60 >= 0 && voice_of(t, 60) == a60 && voice_of(t, 64) >= 0;
+    for (k = 0; k < (uint32_t)(sb * 0.5); k++) run_block();
+    input_off(t, 64);
+    for (k = 0; k < (uint32_t)(sb * 2.0); k++) run_block();
+    ok &= voice_of(t, 60) == a60 && voice_of(t, 64) < 0 && t->step[16].n == 2 && (t->step[16].flags & SF_CONT(0)) &&
+          step_pure_cont(&t->step[17]);
+    song.rec = 0;
+    while (trk_grid(t, &into, &slen) != 64u + 20u) run_block();   /* the next pass: still the one note, held */
+    ok &= voice_of(t, 60) >= 0;
+    check(ok, "2.7 overdub as played: 32 steps held, a note pressed on step 17 of the next pass: the held note goes on");
+    transport_req = 2; run_block();
+    song.rec = 0;
+}
+
 /* SLOOP 2.4: parameter locks. A lock on P_E0 at step 3 sets t->p[P_E0] for that step, the base is back at
  * step 4; a knob turned during the locked step is kept as the new base; STOP restores; a lock on a parameter
  * that is not lockable is refused */
@@ -1470,12 +1653,20 @@ static void t_midicc(void)
     cc_push(0, 7, 0); cc_push(0, 10, 127); cc_push(0, 74, 64); cc_push(0, 72, 127); cc_push(0, 73, 0);
     cc_push(0, 75, 64); cc_push(0, 5, 127); cc_push(0, 91, 127); cc_push(0, 93, 64); cc_push(0, 94, 1);
     run_block(); run_block();
-    check(a->p[P_LEVEL] == 0 && a->p[P_PAN] == 63 && a->p[P_TFLT] == 0 && a->p[P_REL] == 127 && a->p[P_ATK] == 0
-          && a->p[P_DEC] == 64 && a->p[P_GLIDE] == 127 && a->p[P_REV] == 127 && a->p[P_CHOR] == 64 && a->p[P_DLY] == 1,
-          "2.5: CC 7 10 74 72 73 75 5 91 93 94 on ch 1 set track 1 (64 = the middle of PAN / FILTER)");
+    check(a->p[P_LEVEL] == 0 && a->p[P_PAN] == 63 && a->p[P_TFLT] == 0 && a->p[P_E0 + 4] == 64 && a->p[P_REL] == 127 &&
+          a->p[P_ATK] == 0 && a->p[P_DEC] == 64 && a->p[P_GLIDE] == 127 && a->p[P_REV] == 127 && a->p[P_CHOR] == 64 &&
+          a->p[P_DLY] == 1,
+          "CC 7 10 74 72 73 75 5 91 93 94 on ch 1 set track 1 (2.7: 74 = ANALOG's CUT, the FILTER untouched)");
     cc_push(0, 10, 0); cc_push(0, 74, 0); cc_push(0, 7, 127);
     run_block(); run_block();
-    check(a->p[P_PAN] == -64 && a->p[P_TFLT] == -64 && a->p[P_LEVEL] == 127, "2.5: CC 0 / 127: the ends of the range");
+    check(a->p[P_PAN] == -64 && a->p[P_E0 + 4] == ENGINES[0]->edit[4].min && a->p[P_TFLT] == 0 && a->p[P_LEVEL] == 127,
+          "2.5: CC 0 / 127: the ends of the range");
+    cc_push(1, 74, 0);                                  /* (2.7) DIGITAL has no cutoff: the track FILTER, as before */
+    run_block(); run_block();
+    check(b->p[P_TFLT] == -64 && !strcmp(ENGINES[0]->edit[4].label, "CUT"),
+          "CC 74 (2.7, after PR #71): the engine's cutoff (ANALOG CUT); an engine without one (DIGITAL): the FILTER");
+    cc_push(1, 74, 64);
+    run_block(); run_block();
     cc_push(0, 71, 127);
     for (i = 0; i < P_COUNT; i++) before[i] = b->p[i];
     cc_push(1, 71, 127); cc_push(1, 1, 99); cc_push(1, 64, 127);   /* DIGITAL has no RES; mod wheel, sustain: not mapped */
@@ -1624,6 +1815,8 @@ int main(void)
     t_tflt();
     t_usbfull();
     t_micro();
+    t_recquant();
+    t_overdub();
     t_plock();
     t_fill();
     t_chain();
