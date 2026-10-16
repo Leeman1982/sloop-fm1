@@ -148,12 +148,7 @@ static uint32_t lights_word(void)
            (uint32_t)(rec_tempo != 0u) << 9 | (uint32_t)(rec_count != 0u) << 10 | (uint32_t)(usb_full != 0u) << 11 |
            (uint32_t)(lights_sync % 3u) << 12 | (uint32_t)(lights_mout != 0u) << 14 | (uint32_t)(lights_min == 1u) << 15 |
            (uint32_t)(usb_serial != 0u) << 16 | (uint32_t)(vis_style % VIS_STYLES) << 17 |
-           (uint32_t)(lights_min >= 2u && lights_min <= 17u ? lights_min - 1u : 0u) << 21   /* 2.6: CH n (n 1..16; 0 none) */
-#if BOARD_SMK37
-           | vel_word(vel_mode)                                /* SMK-37: menu KEY VELOCITY, bits 28..30 (smk_vel.h) */
-           | (uint32_t)!trs_out << 31                          /* SMK-37: menu TRS MIDI OUT, 1 = OFF (older data: ON) */
-#endif
-        ;
+           (uint32_t)(lights_min >= 2u && lights_min <= 17u ? lights_min - 1u : 0u) << 21;   /* 2.6: CH n (n 1..16; 0 none) */
 }
 static void lights_from_word(uint32_t w)
 {
@@ -170,10 +165,6 @@ static void lights_from_word(uint32_t w)
         lights_min = (uint8_t)(((w >> 21) & 31u) + 1u);   /* 2.6: CH n (an older SLOOP reads NOTES) */
     usb_serial = (uint8_t)((w >> 16) & 1u);
     vis_style = (uint8_t)(((w >> 17) & 15u) % VIS_STYLES);   /* the visualiser (ui_vis.c); 0 in 2.3 = OSCILLOSCOPE */     /* menu USB SERIAL (usb.c usb_cdc_on, at the next start); 0 in 2.3 = OFF */
-#if BOARD_SMK37
-    vel_mode = (uint8_t)vel_of_word(w);         /* (older data: DYNAMIC) */
-    trs_out = (uint8_t)!(w >> 31);              /* (older data: ON) */
-#endif
 }
 
 static void settings_save(void);              /* project.c: flash copy (FELUCCA_FLASH) */

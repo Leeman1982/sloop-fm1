@@ -3,8 +3,8 @@
 /* SMK-37: HOME menu > AUDIO > KEY VELOCITY, how hard the keys and pads play. DYNAMIC: as played (the unit's factory
  * curves, smk_input.h); SOFT: a light touch plays louder; HARD: loud needs a hard hit; FIXED 64 / 100 / 127: every
  * note at that velocity, as on the FM-1 (100). Applied where seq.c reads a key's or a pad's velocity, so the notes,
- * their MIDI out and the drum levels (ghost .. hard) follow it. Kept in the settings (panel.c lights_word bits
- * 28..30; older data has 0 there: DYNAMIC). */
+ * their MIDI out and the drum levels (ghost .. hard) follow it. Kept in the SMK-37 settings (project.c smkset_t;
+ * earlier SMK-37 builds: the settings word's bits 28..30, read once; none: DYNAMIC). */
 #pragma once
 
 enum { VEL_DYNAMIC, VEL_SOFT, VEL_HARD, VEL_FIX64, VEL_FIX100, VEL_FIX127, VEL_N };
@@ -33,7 +33,8 @@ static uint32_t vel_apply(uint32_t mode, uint32_t v)
     }
 }
 
-/* its bits in the settings word (panel.c lights_word, bits 28..30); older data (0) or a value out of range: DYNAMIC */
+/* its bits in the settings word of earlier SMK-37 builds (bits 28..30; project.c smkset_boot reads them while there
+ * is no OBJ_SMKSET); 0 or a value out of range: DYNAMIC */
 static uint32_t vel_word(uint32_t mode) { return (mode % VEL_N) << 28; }
 static uint32_t vel_of_word(uint32_t w) { return ((w >> 28) & 7u) < VEL_N ? (w >> 28) & 7u : VEL_DYNAMIC; }
 

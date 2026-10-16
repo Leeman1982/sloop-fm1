@@ -740,6 +740,64 @@ static void daw_save(void)
     if (memcmp(&d, &daw_saved, sizeof d) && st_save(OBJ_DAW, &d, sizeof d) == 0)
         daw_saved = d;
 }
+/* SMK-37: the HOME menu's own settings (KEY VELOCITY, TRS MIDI OUT, BEND UP / DOWN, LIMITER, KNOB LAYOUT) in an object
+ * of their own (storage.c OBJ_SMKSET), so SLOOP's settings word and MIDI part stay SLOOP's. Earlier SMK-37 builds kept
+ * them in spare bits of those (the settings word's bits 28..31, the MIDI part's last three bytes): with no object yet,
+ * they are read from there once (smkset_boot) and written here from the next save on */
+#define SMKSET_MAGIC 0x54534B53u                   /* "SKST" */
+typedef struct {
+    uint32_t magic;
+    uint8_t vel, trs, bup, bdn, lim, klay, rsv[2];   /* bup / bdn: smk_wheel.h bend_*_byte */
+} smkset_t;
+static smkset_t smkset_saved;
+static uint8_t smkset_old_ml[3], smkset_old_have;  /* the MIDI part's last three bytes as read (midi_part_read) */
+static void smkset_fill(smkset_t *s)
+{
+    memset(s, 0, sizeof *s);
+    s->magic = SMKSET_MAGIC;
+    s->vel = (uint8_t)(vel_mode % VEL_N);
+    s->trs = (uint8_t)(trs_out != 0u);
+    s->bup = (uint8_t)bend_up_byte(bend_up);
+    s->bdn = (uint8_t)bend_dn_byte(bend_dn, bend_up);
+    s->lim = (uint8_t)(lim_classic != 0u);
+    s->klay = (uint8_t)(knob_layout != 0u);
+}
+static void smkset_boot(void)                      /* after the settings (persist_boot, dsu_boot) */
+{
+    smkset_t s;
+    if (st_load(OBJ_SMKSET, &s, sizeof s) == (int)sizeof s && s.magic == SMKSET_MAGIC) {
+        vel_mode = (uint8_t)(s.vel < VEL_N ? s.vel : VEL_DYNAMIC);
+        trs_out = (uint8_t)(s.trs != 0u);
+        bend_up = (uint8_t)bend_up_of_byte(s.bup);
+        bend_dn = (uint8_t)bend_dn_of_byte(s.bdn, bend_up);
+        lim_classic = (uint8_t)(s.lim & 1u);
+        knob_layout = (uint8_t)(s.klay & 1u);
+        knob_layout_apply();
+        smkset_fill(&smkset_saved);
+        return;
+    }
+    /* none: an earlier SMK-37 build's settings, or none at all (the defaults stay) */
+    if (persist_saved.magic == PERSIST_MAGIC) {
+        uint32_t w = persist_saved.lights;
+        vel_mode = (uint8_t)vel_of_word(w);        /* bits 28..30 (older data: DYNAMIC) */
+        trs_out = (uint8_t)!(w >> 31);             /* bit 31, 1 = OFF (older data: ON) */
+    }
+    if (smkset_old_have) {
+        bend_up = (uint8_t)bend_up_of_byte(smkset_old_ml[0]);             /* (0: the default) */
+        bend_dn = (uint8_t)bend_dn_of_byte(smkset_old_ml[1], bend_up);    /* (2.6.4: 0, its BEND RANGE both ways) */
+        lim_classic = (uint8_t)(smkset_old_ml[2] & 1u);                   /* (0: SOFT) */
+        knob_layout = (uint8_t)((smkset_old_ml[2] >> 1) & 1u);            /* (0: FM-1) */
+        knob_layout_apply();
+    }
+    memset(&smkset_saved, 0, sizeof smkset_saved); /* (written at the next save) */
+}
+static void smkset_save(void)
+{
+    smkset_t s;
+    smkset_fill(&s);
+    if (memcmp(&s, &smkset_saved, sizeof s) && st_save(OBJ_SMKSET, &s, sizeof s) == 0)
+        smkset_saved = s;
+}
 #endif
 
 static void persist_boot(void)                    /* before settings_init / panel_init */
@@ -823,6 +881,7 @@ static void persist_boot(void)                    /* before settings_init / pane
 #if BOARD_SMK37
     wcal_boot();                                   /* SMK-37: the wheels' calibration */
     daw_boot();                                    /* SMK-37: DAW mode */
+    smkset_boot();                                 /* SMK-37: the HOME menu's own settings */
 #endif
     up_boot();                                     /* user presets */
     fm6_bank_boot();                               /* the FM6 patch bank (fm6_bank.c) */
@@ -837,8 +896,8 @@ static int project_used(uint32_t slot) { return proj_ok(&proj_slot[slot & 3u]); 
  * map (seq.c ml_tab, ML_N entries), only while something is learned; 2.5 reads an object with the map as one without
  * its SYN kits (their defaults), one without it as its own */
 /* the settings object's third part (2.6): the MIDI LEARN map (seq.c ml_tab, ML_N entries, 2 bytes each, low first),
- * then GLO > MIDI: CH1 CH2 CH3, the drum channel | OTHER << 7, GLO > MIDI 2's BEND, 3 spare (SMK-37: BEND UP, BEND DOWN,
- * LIMITER | KNOB LAYOUT << 1). Written only while it is not
+ * then GLO > MIDI: CH1 CH2 CH3, the drum channel | OTHER << 7, GLO > MIDI 2's BEND, 3 spare (earlier SMK-37 builds:
+ * BEND UP, BEND DOWN, LIMITER | KNOB LAYOUT << 1; read until OBJ_SMKSET exists). Written only while it is not
  * the default (nothing learned, channels 1 2 3 10, OTHER SEL, BEND 2): else the object is exactly 2.5's. 2.6 test
  * builds wrote 32 (the map) or 36 bytes (and the channels) */
 #define MIDI_PART (2u * ML_N + 8u)
@@ -855,12 +914,6 @@ static void midi_part_fill(uint8_t *b)
     b[2u * ML_N + 3u] = (uint8_t)(midi_set[3] | midi_set[4] << 7);
     b[2u * ML_N + 4u] = midi_set[5];
     b[2u * ML_N + 5u] = b[2u * ML_N + 6u] = b[2u * ML_N + 7u] = 0;
-#if BOARD_SMK37
-    b[2u * ML_N + 5u] = (uint8_t)bend_up_byte(bend_up);           /* SMK-37: HOME menu > MIDI > BEND UP (0: 7, as 2.6.4's BEND RANGE) */
-    b[2u * ML_N + 6u] = (uint8_t)bend_dn_byte(bend_dn, bend_up);  /* BEND DOWN (0: as UP) */
-    b[2u * ML_N + 7u] = (uint8_t)(lim_classic & 1u) | (uint8_t)((knob_layout & 1u) << 1);   /* AUDIO > LIMITER (1 CLASSIC),
-                                                                  * SCREEN > KNOB LAYOUT (1 SMK); 0: SOFT, FM-1 */
-#endif
 }
 static int midi_part_default(const uint8_t *b)
 {
@@ -870,11 +923,7 @@ static int midi_part_default(const uint8_t *b)
         if (b[k])
             return 0;
     return b[2u * ML_N] == def[0] && b[2u * ML_N + 1u] == def[1] && b[2u * ML_N + 2u] == def[2] &&
-           b[2u * ML_N + 3u] == (uint8_t)(def[3] | def[4] << 7) && b[2u * ML_N + 4u] == def[5]
-#if BOARD_SMK37
-           && !b[2u * ML_N + 5u] && !b[2u * ML_N + 6u] && !b[2u * ML_N + 7u]
-#endif
-        ;
+           b[2u * ML_N + 3u] == (uint8_t)(def[3] | def[4] << 7) && b[2u * ML_N + 4u] == def[5];
 }
 /* n: 32 (the map), 36 (and the channels) or MIDI_PART; every entry checked (a CC that learns, a parameter this knows, a
  * channel 0..16, a range 1..12) */
@@ -898,11 +947,9 @@ static void midi_part_read(const uint8_t *b, uint32_t n)
         midi_set[5] = (uint8_t)(b[2u * ML_N + 4u] >= 1u && b[2u * ML_N + 4u] <= 12u ? b[2u * ML_N + 4u] : 2u);
         song.g[G_BEND] = midi_set[5];
 #if BOARD_SMK37
-        bend_up = (uint8_t)bend_up_of_byte(b[2u * ML_N + 5u]);            /* (older data: 0, the default) */
-        bend_dn = (uint8_t)bend_dn_of_byte(b[2u * ML_N + 6u], bend_up);   /* (2.6.4: 0, its BEND RANGE both ways) */
-        lim_classic = (uint8_t)(b[2u * ML_N + 7u] & 1u);                  /* (older data: SOFT, FM-1) */
-        knob_layout = (uint8_t)((b[2u * ML_N + 7u] >> 1) & 1u);
-        knob_layout_apply();
+        /* earlier SMK-37 builds' BEND UP / DOWN, LIMITER | KNOB LAYOUT: for smkset_boot, while there is no OBJ_SMKSET */
+        smkset_old_ml[0] = b[2u * ML_N + 5u], smkset_old_ml[1] = b[2u * ML_N + 6u], smkset_old_ml[2] = b[2u * ML_N + 7u];
+        smkset_old_have = 1;
 #endif
     }
     fm1_irq_on();
@@ -967,6 +1014,7 @@ static void settings_save(void)
 #if BOARD_SMK37
     wcal_save();
     daw_save();
+    smkset_save();
 #endif
     {
         uint8_t mp[MIDI_PART];

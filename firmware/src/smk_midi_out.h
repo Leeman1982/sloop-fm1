@@ -22,7 +22,7 @@
 #define SMO_TIMEOUT 30u           /* ticks (3 ms; a byte takes 0.32 ms) */
 #define SMO_DEAD 4u               /* bytes timed out in a row: the UART is not there */
 
-static uint8_t trs_out = 1;       /* HOME menu > MIDI > TRS MIDI OUT (panel.c lights_word bit 31, 1 = OFF) */
+static uint8_t trs_out = 1;       /* HOME menu > MIDI > TRS MIDI OUT (project.c smkset_t) */
 static struct {
     uint8_t ring[SMO_RING];
     volatile uint32_t w, r;       /* w: the producer's, r: the tick's */

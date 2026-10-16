@@ -80,6 +80,8 @@ int main(void)
           st_sector(OBJ_WCAL, 0) == 0xB1000u && st_sector(OBJ_WCAL, 1) == 0xB2000u && ST_OWNER_OFF == 0xAF000u);
     check("storage.c: DAW mode (OBJ_DAW) 0xB3000/0xB4000, below the update staging 0xBB000",
           st_sector(OBJ_DAW, 0) == 0xB3000u && st_sector(OBJ_DAW, 1) == 0xB4000u && st_sector(OBJ_DAW, 1) + 0x1000u <= 0xBB000u);
+    check("storage.c: the SMK-37 settings (OBJ_SMKSET) 0xB5000/0xB6000, below the update staging 0xBB000",
+          st_sector(OBJ_SMKSET, 0) == 0xB5000u && st_sector(OBJ_SMKSET, 1) == 0xB6000u && st_sector(OBJ_SMKSET, 1) + 0x1000u <= 0xBB000u);
     check("FL_PLAIN_LO = the VM start 0x9D000", FL_PLAIN_LO == 0x9D000u);
     check("FL_JEDEC_OK: the SMK part 0xEB6014 and 0x856014 only", FL_JEDEC_OK(0xEB6014u) && FL_JEDEC_OK(0x856014u) &&
           !FL_JEDEC_OK(0u) && !FL_JEDEC_OK(0xFFFFFFu) && !FL_JEDEC_OK(0xEB6015u));

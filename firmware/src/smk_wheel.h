@@ -83,7 +83,8 @@ static int smk_wcal_mod(smk_wcal_t *c, int32_t rlo, int32_t rhi, int32_t up)
 }
 
 /* HOME menu > MIDI > BEND UP, BEND DOWN: the pitch wheel's range on the internal sounds, semitones up and down (0: that
- * way does not bend). Kept in the settings (project.c midi_part_fill: two spare bytes of the MIDI part). UP's byte is
+ * way does not bend). Kept in the SMK-37 settings (project.c smkset_t; earlier SMK-37 builds: two spare bytes of the
+ * MIDI part, read once), as bytes: UP's byte is
  * 2.6.4's BEND RANGE (0 = the default 7, BEND_NONE = 0); DOWN's: 0 = as UP, so 2.6.4's range (and older data: 7)
  * comes back as both */
 #define BEND_N 8u
