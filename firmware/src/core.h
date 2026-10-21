@@ -20,11 +20,21 @@ enum { V_POLY, V_MONO, V_LEGATO, V_UNISON };   /* P_VOICE */
 /* SLOOP 2.4: FM6 (eng_fm6.c) is engine 9 in every build; SLICE, when built, comes last (10). Projects and user
  * presets store the engine index as a byte, and no shipped SLOOP was built with SLICE, so its number is stored
  * nowhere: FM6 may take 9 and SLICE moves up (engines.c ENGINES[], params.c N_ENGNAME follow this order) */
-#define NENGINES (12 + FELUCCA_SLICE)
+/* VIDEODROME: the six component models (eng_vd_*.c) appended after NOISE (12..17): every SLOOP engine keeps its number,
+ * so SLOOP's projects, user presets and favourites load as they are. The PRESETS list shows the six first (ui.c) */
+#define NENGINES (18 + FELUCCA_SLICE)
 #define ENGI_GRAIN 8u            /* GRAIN, PHYS, NOISE (SLOOP 2.5, appended after FM6: the stores keep the numbers) */
 #define ENGI_PHYS 10u
 #define ENGI_NOISE 11u
-#define ENGI_SLICE 12u           /* with FELUCCA_SLICE: after NOISE */
+#define ENGI_MODELD 12u          /* VIDEODROME: Minimoog Model D (eng_vd_moog.c) */
+#define ENGI_P5 13u              /* Prophet-5 rev 3 (eng_vd_p5.c) */
+#define ENGI_JP8 14u             /* Jupiter-8 (eng_vd_jp8.c) */
+#define ENGI_OBX 15u             /* OB-X (eng_vd_obx.c) */
+#define ENGI_MS20 16u            /* MS-20 (eng_vd_ms20.c) */
+#define ENGI_CS80 17u            /* CS-80 (eng_vd_cs80.c) */
+#define ENGI_VD0 ENGI_MODELD     /* the first of the six */
+#define NVD 6u
+#define ENGI_SLICE 18u           /* with FELUCCA_SLICE: last */
 #define ENGI_FM6 9u              /* the FM6 engine's index (eng_fm6.c, the stores: append-only) */
 #define UP_SLOTS 32u             /* user presets (upreset.c) */
 #define NELEM(a) (sizeof(a) / sizeof((a)[0]))

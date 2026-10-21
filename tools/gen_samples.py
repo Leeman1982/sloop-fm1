@@ -131,6 +131,9 @@ def name_note(name):
 # SLOOP 2.7.2: sets that keep their first sound only, over the whole keyboard (SCRCH: the scratch, 3 KB; the backspin
 # and the rewind, 20 KB, made room for the NOTES editor). The set and its number stay: projects and presets unchanged
 ONE_SOUND = {"SCRCH"}
+# VIDEODROME: sets thinned to one zone (their middle sample) for the six component models' flash: every set keeps its
+# number (SLOOP's projects and presets still name the same sets), it just stretches over more keys (~43 KB)
+ONE_ZONE = {"FLUTE": "01_", "VIBES": "01_"}
 
 
 def cc0_entries(setname, kind):
@@ -138,6 +141,8 @@ def cc0_entries(setname, kind):
     files = sorted((CC0 / setname).glob("*.wav"))
     if setname in ONE_SOUND:
         files = files[:1]
+    if setname in ONE_ZONE:
+        files = [p for p in files if p.name.startswith(ONE_ZONE[setname])]
     out, conv = [], 1
     if kind != "kit" and not all(re.search(r"_m\d+\.wav$", p.name) for p in files):
         # octave convention of this set (C4 = 60 or C3 = 60): YIN votes, the names give the notes

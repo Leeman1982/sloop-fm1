@@ -241,6 +241,11 @@ run "SLICER: no clicks, timing, sync with the sequencer, STUT, cost, demos" "$OU
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/fm6_test" tests/fm6_test.c -lm
 mkdir -p build/fm6_demo
 run "FM6: algorithms, envelopes, retrigger, DC, clipping, macros, patch formats, voices, the bank, demos" "$OUT/fm6_test" build/fm6_demo
+# VIDEODROME: the six component models (tests/vd_test.c); their tables are generated and checked in
+python3 tools/gen_vd_tables.py "$OUT/vd_tables.h" >/dev/null
+run "VIDEODROME: firmware/src/vd_tables.h is what tools/gen_vd_tables.py writes" cmp "$OUT/vd_tables.h" firmware/src/vd_tables.h
+$CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/vd_test" tests/vd_test.c -lm -lpthread
+run "VIDEODROME: the filters' resonance and bounds, the contours, every preset of the six models" "$OUT/vd_test"
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/regress" tests/regress.c -lm
 # the CPU budget: counted by the kernel on macOS; elsewhere under callgrind when valgrind is there (exact, ~45 s;
 # SKIP_CPU_VALGRIND=1 to time instead, which is only a rough check)

@@ -711,13 +711,54 @@ static const struct { uint8_t kind, e; const char *name; } BANK[] = {
     {BK_FX, ENGI_SLICE, "BREAK 16"}, {BK_FX, ENGI_SLICE, "CHOP 8"}, {BK_FX, ENGI_SLICE, "REVERSE"},
     {BK_FX, ENGI_SLICE, "USR SLICE"},
 #endif
+    /* VIDEODROME: the six component models, by kind. Kept at the end of BANK so a favourite stored by SLOOP (a BANK
+     * index) still names the same sound; the PRESETS list shows them first (bank_of / list_of) */
+    {BK_BASS, ENGI_MODELD, "MOOG BASS"}, {BK_BASS, ENGI_MODELD, "SUB BASS"}, {BK_BASS, ENGI_MODELD, "ACID BASS"},
+    {BK_BASS, ENGI_MODELD, "FUNK BASS"}, {BK_BASS, ENGI_MODELD, "GROWL BASS"}, {BK_BASS, ENGI_MODELD, "LONG LIVE"},
+    {BK_BASS, ENGI_MODELD, "MAX RENN"}, {BK_BASS, ENGI_P5, "POLY BASS"}, {BK_BASS, ENGI_P5, "DEEP BASS"},
+    {BK_BASS, ENGI_P5, "GROWL BASS"}, {BK_BASS, ENGI_JP8, "JP8 BASS"}, {BK_BASS, ENGI_JP8, "XMOD BASS"},
+    {BK_BASS, ENGI_OBX, "PUNCH BASS"}, {BK_BASS, ENGI_OBX, "FAT BASS"}, {BK_BASS, ENGI_MS20, "ACID BASS"},
+    {BK_BASS, ENGI_MS20, "SCRM BASS"}, {BK_BASS, ENGI_MS20, "SUB BASS"}, {BK_BASS, ENGI_CS80, "CS BASS"},
+    {BK_KEYS, ENGI_P5, "E.PIANO"}, {BK_KEYS, ENGI_P5, "CLAV FUNK"}, {BK_KEYS, ENGI_CS80, "HARPSICH"},
+    {BK_ORGAN, ENGI_CS80, "SINE ORGAN"}, {BK_PAD, ENGI_P5, "P5 PAD"}, {BK_PAD, ENGI_P5, "GLASS PAD"},
+    {BK_PAD, ENGI_P5, "PWM STRING"}, {BK_PAD, ENGI_P5, "NEW FLESH"}, {BK_PAD, ENGI_JP8, "LUSH PAD"},
+    {BK_PAD, ENGI_JP8, "STRING PAD"}, {BK_PAD, ENGI_JP8, "BRIGHT PAD"}, {BK_PAD, ENGI_JP8, "NICKI"},
+    {BK_PAD, ENGI_OBX, "STRING PAD"}, {BK_PAD, ENGI_OBX, "WARM PAD"}, {BK_PAD, ENGI_OBX, "HAUNTED"},
+    {BK_PAD, ENGI_OBX, "VIDEODROME"}, {BK_PAD, ENGI_OBX, "BIANCA"}, {BK_PAD, ENGI_MS20, "HAUNT PAD"},
+    {BK_PAD, ENGI_CS80, "TEARS RAIN"}, {BK_PAD, ENGI_CS80, "CS STRINGS"}, {BK_PAD, ENGI_CS80, "YAMAHA PAD"},
+    {BK_PAD, ENGI_CS80, "HUMAN VOX"}, {BK_PAD, ENGI_CS80, "RANNOCH"}, {BK_PAD, ENGI_CS80, "SIGNAL"},
+    {BK_LEAD, ENGI_MODELD, "MOOG LEAD"}, {BK_LEAD, ENGI_MODELD, "TB LEAD"}, {BK_LEAD, ENGI_MODELD, "FIFTH LEAD"},
+    {BK_LEAD, ENGI_MODELD, "SCREAM"}, {BK_LEAD, ENGI_MODELD, "SOLO SAX"}, {BK_LEAD, ENGI_P5, "SYNC LEAD"},
+    {BK_LEAD, ENGI_P5, "RESO LEAD"}, {BK_LEAD, ENGI_JP8, "XMOD LEAD"}, {BK_LEAD, ENGI_JP8, "SYNC LEAD"},
+    {BK_LEAD, ENGI_JP8, "24DB LEAD"}, {BK_LEAD, ENGI_OBX, "SYNC LEAD"}, {BK_LEAD, ENGI_OBX, "XMOD LEAD"},
+    {BK_LEAD, ENGI_OBX, "UNISON LD"}, {BK_LEAD, ENGI_MS20, "SCREAM LD"}, {BK_LEAD, ENGI_MS20, "RING LEAD"},
+    {BK_LEAD, ENGI_MS20, "HPF SCREAM"}, {BK_LEAD, ENGI_MS20, "CATHODE"}, {BK_LEAD, ENGI_MS20, "SWOOP LEAD"},
+    {BK_LEAD, ENGI_CS80, "CS LEAD"}, {BK_LEAD, ENGI_CS80, "GLIDE LEAD"}, {BK_PLUCK, ENGI_MODELD, "SEQ PLUCK"},
+    {BK_PLUCK, ENGI_P5, "BELL PLUCK"}, {BK_PLUCK, ENGI_JP8, "XMOD BELL"}, {BK_PLUCK, ENGI_JP8, "GLASS PLUK"},
+    {BK_PLUCK, ENGI_JP8, "ARENA ARP"}, {BK_PLUCK, ENGI_OBX, "BELL PLUCK"}, {BK_PLUCK, ENGI_MS20, "LASER PLUK"},
+    {BK_PLUCK, ENGI_MS20, "METAL HIT"}, {BK_PLUCK, ENGI_CS80, "BELL"}, {BK_STAB, ENGI_MODELD, "MOOG BRASS"},
+    {BK_STAB, ENGI_P5, "P5 BRASS"}, {BK_STAB, ENGI_P5, "P5 STAB"}, {BK_STAB, ENGI_P5, "CIVIC TV"},
+    {BK_STAB, ENGI_JP8, "JP8 BRASS"}, {BK_STAB, ENGI_JP8, "POLY STAB"}, {BK_STAB, ENGI_OBX, "OBX BRASS"},
+    {BK_STAB, ENGI_OBX, "JUMP STAB"}, {BK_STAB, ENGI_OBX, "1-FINGER"}, {BK_STAB, ENGI_OBX, "HORROR STB"},
+    {BK_STAB, ENGI_OBX, "CHORD STAB"}, {BK_STAB, ENGI_MS20, "BRASS STAB"}, {BK_STAB, ENGI_CS80, "BLADE BRSS"},
+    {BK_STAB, ENGI_CS80, "CS BRASS"}, {BK_STAB, ENGI_CS80, "WARM BRASS"}, {BK_FX, ENGI_MODELD, "SELF-OSC"},
+    {BK_FX, ENGI_MODELD, "NOISE SWP"}, {BK_FX, ENGI_P5, "FILT SWEEP"}, {BK_FX, ENGI_JP8, "SPECTACLE"},
+    {BK_FX, ENGI_JP8, "NOISE SWP"}, {BK_FX, ENGI_MS20, "SELF-OSC"}, {BK_FX, ENGI_MS20, "SIREN"},
+    {BK_FX, ENGI_MS20, "NOISE SWP"}, {BK_FX, ENGI_MS20, "FLESH GUN"}, {BK_FX, ENGI_CS80, "TV STATIC"},
 };
 #define NBANK (sizeof BANK / sizeof BANK[0])
 static uint8_t bank_pi[NBANK];                       /* the preset index of each entry in its engine */
 static uint8_t bank_ready;
+static uint16_t bank_vd0 = NBANK;                    /* VIDEODROME: the first BANK entry of the six models (the tail) */
+/* the PRESETS list shows BANK's tail (the six models) first, then the rest: list index n <-> BANK index */
+UI_SMALL static uint32_t bank_of(uint32_t n) { return n < NBANK - bank_vd0 ? bank_vd0 + n : n - (NBANK - bank_vd0); }
+UI_SMALL static uint32_t list_of(uint32_t b) { return b >= bank_vd0 ? b - bank_vd0 : b + (NBANK - bank_vd0); }
 UI_SMALL static void bank_resolve(void)
 {
     uint32_t i, k;
+    for (i = NBANK; i > 0u && BANK[i - 1u].e >= ENGI_VD0 && BANK[i - 1u].e < ENGI_VD0 + NVD; i--)
+        ;
+    bank_vd0 = (uint16_t)i;
     for (i = 0; i < NBANK; i++) {
         const engine_t *e = ENGINES[BANK[i].e % NENGINES];
         bank_pi[i] = 0xFF;
@@ -734,7 +775,7 @@ UI_SMALL static uint32_t base_pos(uint32_t *total)            /* list index of t
         bank_resolve();
     for (i = 0; i < NBANK; i++)
         if (BANK[i].e == TSEL->eng_req && bank_pi[i] == TSEL->preset)
-            cur = i;
+            cur = list_of(i);
     if (user_of(TSEL) < UP_SLOTS)
         cur = NBANK + up_rank(user_of(TSEL));
     *total = NBANK + up_count();
@@ -750,10 +791,16 @@ UI_SMALL static uint32_t base_at(uint32_t n, uint32_t *k)
         *k = up_nth(n - NBANK);
         return NENGINES;
     }
+    n = bank_of(n);
     *k = bank_pi[n] == 0xFF ? 0u : bank_pi[n];
     return BANK[n].e;
 }
-UI_SMALL static const char *base_kind(uint32_t n) { return n < NBANK ? BANK_KIND[BANK[n].kind] : "USER"; }
+UI_SMALL static const char *base_kind(uint32_t n)
+{
+    if (!bank_ready)
+        bank_resolve();
+    return n < NBANK ? BANK_KIND[BANK[bank_of(n)].kind] : "USER";
+}
 
 /* SLOOP 2.7: favourites (PRESETS page, KNOB 4): up to 16 sounds at the top of the PRESETS list, kept in the FM-1's
  * settings (project.c, the settings' side record). An entry: a factory sound, its BANK index; a user preset, FAV_USER |
@@ -768,6 +815,8 @@ static int8_t fav_at = -1;                           /* the favourite the select
 UI_SMALL static uint32_t fav_list(uint32_t *b)                /* the favourites as base list indices, in order */
 {
     uint32_t i, n = 0;
+    if (!bank_ready)
+        bank_resolve();
     for (i = 0; i < FAV_N; i++) {
         uint32_t f = fav[i];
         if (f == FAV_NONE)
@@ -777,7 +826,7 @@ UI_SMALL static uint32_t fav_list(uint32_t *b)                /* the favourites 
                 continue;
             b[n++] = NBANK + up_rank(f & 0xFFu);
         } else if (f < NBANK) {
-            b[n++] = f;
+            b[n++] = list_of(f);                     /* (a favourite is a BANK index; the list, the six first) */
         }
     }
     return n;

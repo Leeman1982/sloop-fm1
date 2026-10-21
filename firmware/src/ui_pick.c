@@ -33,7 +33,7 @@ static uint32_t pick_kind_of(uint32_t n)
 {
     if (is_drum(TSEL))
         return n >= DRUM_USR ? PK_USER : PK_KITS;
-    return n < NBANK ? BANK[n].kind : PK_USER;
+    return n < NBANK ? BANK[bank_of(n)].kind : PK_USER;
 }
 static void pick_name(uint32_t n, char *b)        /* 13 bytes */
 {
