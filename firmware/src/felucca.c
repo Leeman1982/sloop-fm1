@@ -19,13 +19,14 @@
 #include "fm1_lcd_hw.h"
 #include "fm1_cpu1.h"      /* the second core (X0X): started in main.c, used by the render later */
 #include "felucca_tables.h"
-#define BRAND_NAME "SLOOP"
-#define BRAND_SAIL_X 96
-#define BRAND_BASED "BASED ON FELUCCA"
-#define BRAND_CRASH "FELUCCA CRASH"
-#define BRAND_RESCUE "SLOOP USB RESCUE"
+#define BRAND_NAME "VIDEODROME"
+#define BRAND_SAIL_X 172            /* (VIDEODROME: past the longer name) */
+#define BRAND_BASED "BASED ON SLOOP + FELUCCA"
+#define BRAND_CRASH "VIDEODROME CRASH"
+#define BRAND_RESCUE "VIDEODROME USB RESCUE"
+#define BRAND_URL "GITHUB: LEEMAN1982/SLOOP-FM1"   /* VIDEODROME: where its source is (ABOUT; 28 characters fit) */
 #define VIS_STYLES 12u
-#define VIS_LAST_NAMES "SLOOP"
+#define VIS_LAST_NAMES "TEST CARD"
 #define VIS_N_STR "/12"
 
 #include "libc.c"

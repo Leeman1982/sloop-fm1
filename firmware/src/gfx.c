@@ -49,7 +49,12 @@ static const palette_t PALETTES[] = {
     {"CYAN", {RGB(0, 30, 50), RGB(0, 62, 96), RGB(16, 112, 160), RGB(56, 172, 222), RGB(140, 222, 255)}},
     {"RED", {RGB(52, 8, 8), RGB(100, 18, 14), RGB(170, 36, 26), RGB(226, 64, 48), RGB(255, 112, 92)}},
     {"MONO", {RGB(40, 40, 40), RGB(80, 80, 80), RGB(130, 130, 130), RGB(186, 186, 186), RGB(226, 226, 226)}},
+    /* VIDEODROME: an early-80s cable channel on a tired set: the hot orange of a 1983 title card in five steps of
+     * phosphor, and the raster (every other line dimmed, vd_raster). Appended: SLOOP's palette numbers stay; the
+     * default of a fresh FM-1 (panel.c settings_init) */
+    {"CIVIC 83", {RGB(52, 14, 4), RGB(110, 34, 8), RGB(176, 64, 14), RGB(232, 100, 24), RGB(255, 150, 60)}},
 };
+#define PAL_CIVIC 5u
 #define NPALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
 static uint16_t pal[5];
 #define C_LINE pal[0]                /* 1 rules, separators */
@@ -78,13 +83,20 @@ typedef struct {
 _Static_assert(sizeof(theme_t) == 40u, "theme layout (the editor's Theme page writes these bytes)");
 static theme_t theme;                            /* the theme there is (theme_valid: project.c theme_check passed) */
 static uint8_t theme_valid, theme_on;
-/* the tracks' colours: full, two thirds, one third (the built-in ones as they always were) */
-static const uint16_t TE_COL_DEF[4] = {RGB(40, 124, 255), RGB(30, 204, 112), RGB(255, 198, 24), RGB(255, 98, 26)};
-static const uint16_t TE_MID_DEF[4] = {RGB(26, 82, 170), RGB(20, 136, 76), RGB(170, 132, 16), RGB(170, 66, 18)};
-static const uint16_t TE_DIM_DEF[4] = {RGB(14, 40, 86), RGB(10, 66, 38), RGB(86, 66, 8), RGB(86, 32, 8)};
-static uint16_t TE_COL[4] = {RGB(40, 124, 255), RGB(30, 204, 112), RGB(255, 198, 24), RGB(255, 98, 26)};
-static uint16_t TE_MID[4] = {RGB(26, 82, 170), RGB(20, 136, 76), RGB(170, 132, 16), RGB(170, 66, 18)};
-static uint16_t TE_DIM[4] = {RGB(14, 40, 86), RGB(10, 66, 38), RGB(86, 66, 8), RGB(86, 32, 8)};
+/* the tracks' colours: full, two thirds, one third. VIDEODROME: the colour bars' (SMPTE: cyan, magenta, yellow) for
+ * the three synth tracks, the title card's orange for the drums */
+#define VD_T1 RGB(0, 204, 224)
+#define VD_T2 RGB(224, 48, 200)
+#define VD_T3 RGB(232, 212, 0)
+#define VD_T4 RGB(255, 104, 24)
+static const uint16_t TE_COL_DEF[4] = {VD_T1, VD_T2, VD_T3, VD_T4};
+static const uint16_t TE_MID_DEF[4] = {RGB(0, 136, 150), RGB(150, 32, 134), RGB(154, 141, 0), RGB(170, 70, 16)};
+static const uint16_t TE_DIM_DEF[4] = {RGB(0, 68, 74), RGB(74, 16, 66), RGB(78, 70, 0), RGB(86, 34, 8)};
+static uint16_t TE_COL[4] = {VD_T1, VD_T2, VD_T3, VD_T4};
+static uint16_t TE_MID[4] = {RGB(0, 136, 150), RGB(150, 32, 134), RGB(154, 141, 0), RGB(170, 70, 16)};
+static uint16_t TE_DIM[4] = {RGB(0, 68, 74), RGB(74, 16, 66), RGB(78, 70, 0), RGB(86, 34, 8)};
+static uint8_t vd_raster;                        /* VIDEODROME: the CRT raster on (palette CIVIC 83; palette_set) */
+static uint8_t cv_ras;                           /* the canvas has its raster (once: a second blit must not dim it again) */
 static uint16_t rgb565_scale(uint32_t c, uint32_t num, uint32_t den)
 {
     uint32_t r = ((c >> 11) & 31u) * num / den, g = ((c >> 5) & 63u) * num / den, b = (c & 31u) * num / den;
@@ -170,6 +182,7 @@ static void palette_set(uint32_t i)              /* built-in palette i, or the t
         pal[k] = cu ? theme.c[k] : PALETTES[i % NPALETTES].c[k];
     pal_bg = cu ? theme.bg : 0u;
     pal_hi = cu ? theme.hi : 0xFFFFu;
+    vd_raster = !cu && i % NPALETTES == PAL_CIVIC;
     for (k = 0; k < 4u; k++)
         te_g[k] = te_gray(TE_G_DEF[k]);
     for (k = 0; k < 4u; k++) {
@@ -189,16 +202,38 @@ static void cv_begin(uint32_t w, uint32_t h, uint16_t bg)
     lcd_sync();                     /* the last blit may still read cv_px */
     cv_w = w;
     cv_h = h;
+    cv_ras = 0;
     n = w * h;
     for (i = 0; i < n; i++)
         cv_px[i] = swap16(bg);
 }
 
-static void cv_blit(uint32_t x, uint32_t y) { lcd_blit(x, y, cv_w, cv_h, cv_px); }
+/* VIDEODROME: the raster. Every other line of the screen at three quarters (a CRT's dark between its scanlines),
+ * through everything drawn, text and all, as a set does it: rows r0.. of the canvas, blitted at screen row y */
+UI_SMALL static void cv_raster(uint32_t y, uint32_t r0)
+{
+    uint32_t r, x;
+    if (!vd_raster || cv_ras)
+        return;
+    cv_ras = 1;
+    for (r = r0 + ((y + r0 + 1u) & 1u); r < cv_h; r += 2u) {
+        uint16_t *p = &cv_px[r * cv_w];
+        for (x = 0; x < cv_w; x++) {
+            uint32_t c = swap16(p[x]);
+            p[x] = swap16(((c >> 1) & 0x7BEFu) + ((c >> 2) & 0x39E7u));
+        }
+    }
+}
+static void cv_blit(uint32_t x, uint32_t y)
+{
+    cv_raster(y, 0);
+    lcd_blit(x, y, cv_w, cv_h, cv_px);
+}
 
 /* canvas rows r0 .. cv_h-1 only, to screen row y + r0 */
 static void cv_blit_from(uint32_t x, uint32_t y, uint32_t r0)
 {
+    cv_raster(y, 0);
     if (r0 < cv_h)
         lcd_blit(x, y + r0, cv_w, cv_h - r0, cv_px + r0 * cv_w);
 }

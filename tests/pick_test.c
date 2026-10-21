@@ -56,9 +56,13 @@ int main(int argc, char **argv)
     pick_page = 0; pick_turn(-1);
     check(pick_page == np - 1u, "< on the first page: the last");
     pick_page = 1;
-    pick_select(3);
     pick_info(&pg);
-    check(pick_cur() == pg.first + 3u, "a pad loads its sound (as PRESETS)");
+    {   /* (a pad the page has: VIDEODROME's 18 basses leave two on page 2) */
+        uint32_t w = pg.len > 3u ? 3u : pg.len - 1u;
+        pick_select(w);
+        pick_info(&pg);
+        check(pick_cur() == pg.first + w, "a pad loads its sound (as PRESETS)");
+    }
     fm1_ms += PICK_MS + 10u;
     check(!pick_shown(), "closes by itself after PICK_MS");
     pick_pin_toggle();

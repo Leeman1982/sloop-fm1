@@ -816,13 +816,14 @@ int main(int argc, char **argv)
             check(ok, "theme (2.7): checked (CRC, the strongest step and the accent standing out from the background, a "
                       "printable name); a first-beta THM1 taken with an accent");
             ui.menu = 1; ui.menu_sel = MI_COLOR; ui.force = 1; frame();
-            settings.palette = 4; theme_on = 0; palette_set(4);
-            encs[panel.enc[EN_K1]] = 1; frame();      /* no theme: MONO -> GREEN, as ever */
+            /* (VIDEODROME: the last built-in palette is CIVIC 83, after MONO) */
+            settings.palette = NPALETTES - 1u; theme_on = 0; palette_set(NPALETTES - 1u);
+            encs[panel.enc[EN_K1]] = 1; frame();      /* no theme: CIVIC 83 -> GREEN, as ever */
             ok = settings.palette == 0u && !theme_on;
-            settings.palette = 4; palette_set(4);
+            settings.palette = NPALETTES - 1u; palette_set(NPALETTES - 1u);
             theme = th; theme_valid = 1;
-            encs[panel.enc[EN_K1]] = 1; frame();      /* MONO -> SUNSET */
-            ok &= theme_on && settings.palette == 4u && pal[0] == th.c[0] && pal[4] == th.c[4] && C_BLACK == th.bg &&
+            encs[panel.enc[EN_K1]] = 1; frame();      /* CIVIC 83 -> SUNSET */
+            ok &= theme_on && settings.palette == NPALETTES - 1u && !vd_raster && pal[0] == th.c[0] && pal[4] == th.c[4] && C_BLACK == th.bg &&
                   TE_COL[0] == th.trk[0] && TE_COL[3] == th.trk[3] && TE_MID[1] == rgb565_scale(th.trk[1], 2, 3) &&
                   (lights_word() >> 30 & 1u) && !strcmp(mi_value(MI_COLOR, &(uint16_t){0}), "SUNSET") && C_WHITE == th.hi;
             ui.force = 1; frame(); ppm("menu-theme");
@@ -862,7 +863,7 @@ int main(int argc, char **argv)
             ok &= pal[4] == PALETTES[settings.palette].c[4] && strcmp(mi_value(MI_COLOR, &(uint16_t){0}), "SUNSET");
             theme_on = 0; settings.palette = pal0; palette_set(pal0);
             ui.menu_sel = MI_USB; ui.force = 1; frame();      /* (back to AUDIO) */
-            check(ok, "MENU > COLOR (2.7): your theme after MONO, by its name; its colours, background and the tracks'; bit 30");
+            check(ok, "MENU > COLOR (2.7): your theme after the last palette, by its name; its colours, background and the tracks'; bit 30");
         }
         {   /* 2.7: the page counter counts the pages SELECT walks (SEQ: STEP 1/2, PATTERN 2/2; SONG not counted) */
             uint32_t n, k1, n1, k2, n2, k3 = 0, n3 = 0, menu0 = ui.menu, sel0 = ui.menu_sel;
@@ -1576,7 +1577,7 @@ int main(int argc, char **argv)
             go_home(); frame();
             pc_req[1] = 1;                                /* PC 0 on track 2's channel: the first sound of the list */
             frame();
-            check(trk[1].eng_req == BANK[0].e && trk[1].preset == bank_pi[0] && !strncmp(ui.msg, "T2 PROG 0", 9),
+            check(trk[1].eng_req == BANK[bank_of(0)].e && trk[1].preset == bank_pi[bank_of(0)] && !strncmp(ui.msg, "T2 PROG 0", 9),
                   "MIDI Program Change 0: track 2 takes the first sound of the PRESETS list (T2 PROG 0)");
             pc_req[3] = 3;                                /* PC 2 on the drum channel: kit 2 */
             frame();
