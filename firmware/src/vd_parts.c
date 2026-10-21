@@ -67,8 +67,9 @@ static inline int32_t vd_mul(int32_t a, int32_t b) { return (a * (b >> 2) + 4096
  * real instrument never let out */
 static inline int32_t vd_dc(int32_t *z, int32_t x)
 {
-    *z += (x - *z) >> 10;
-    return x - *z;
+    *z += ((x << 8) - *z) >> 10;                         /* (the capacitor in Q8: a Q0 one, floored by the shift, settles
+                                                          * up to ~500 below the mean and leaves that as DC) */
+    return x - (*z >> 8);
 }
 
 /* ------------------------------------------- the state-variable cores --- */
@@ -210,6 +211,10 @@ static inline __attribute__((always_inline)) int32_t vd_k35_hp(const vd_k35c_t *
     f->s2 = clamp(f->s2 + 2 * v, -(1 << 26), 1 << 26);
     return h1 >> 8;
 }
+
+/* the voice board's output stage: the VCA's sample (voice_amp: s within +-65535) and the board's makeup, Q4 (16 =
+ * x1). After voice_amp, so its 32-bit product never sees the gain */
+#define VD_OUT(s, m, i, g16) ((voice_amp((s), (m), (i)) * (g16)) >> 4)
 
 /* keyboard tracking: 1/16 semitones from middle C (pitch16 60 * 16) as cutoff units, Q8 of the amount
  * (256 = full: an octave of the key moves the cutoff an octave, 3589 units) */

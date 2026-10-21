@@ -102,7 +102,7 @@ static inline __attribute__((always_inline)) int32_t vdc_svf(const vdc_svf_t *c,
 }
 
 /* the wave shape converter's output from a saw core (ph, inc), the pulse width pw */
-static inline int32_t vdc_wsc(uint32_t w, uint32_t ph, uint32_t inc, uint32_t pw)
+static inline __attribute__((always_inline)) int32_t vdc_wsc(uint32_t w, uint32_t ph, uint32_t inc, uint32_t pw)
 {
     switch (w) {
     case 1: return osc_pulse(ph, inc, pw);
@@ -118,7 +118,7 @@ static void vdc_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     const int16_t *p = t->p;
     uint32_t wa = (uint32_t)p[P_E0] & 3u, wb = (uint32_t)p[P_E1] & 3u, i, inca, incb, pha, phb, pw;
     int32_t u, uh, bri, la = (127 - p[P_E3]) * 258, lb = p[P_E3] * 258, ga, gb;
-    int32_t h1a, h2a, l1a, l2a, h1b, h2b, l1b, l2b, pa, hpf_on = p[P_E6] > 0;
+    int32_t h1a, h2a, l1a, l2a, h1b, h2b, l1b, l2b, pa, hpf_on = p[P_E6] > 0, gdc_a, gdc_b;
     vdc_svf_t hp, lp;
     if (!s)
         return;
@@ -130,6 +130,8 @@ static void vdc_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
     uh = (p[P_E6] << 8) + m->cutoff + (s->aux[2] >> 8) + VD_KTRK(m->pitch16, 128) + bri;
     vdc_coef(&lp, u, p[P_E5]);
     vdc_coef(&hp, uh, 40);                                /* the HPF's own resonance: a mild peak */
+    gdc_a = wa != 3u ? (int32_t)((19346u * (inca >> 16)) >> 16) : 0;
+    gdc_b = wb != 3u ? (int32_t)((19346u * (incb >> 16)) >> 16) : 0;
     pha = s->ph[0];
     phb = s->ph[1];
     h1a = s->f[0], h2a = s->f[1], l1a = s->f[2], l2a = s->f[3];
@@ -140,8 +142,10 @@ static void vdc_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         int32_t a, b, d;
         uint32_t na = pha + inca, nb = phb + incb;
         /* the cores and their reset one-shots: ~1.3 samples of +0.45, the part past this sample carried to the next */
-        a = vdc_wsc(wa, pha, inca, pw) + ga;
-        b = vdc_wsc(wb, phb, incb, pw) + gb;
+        /* (the one-shot's mean taken out: ~19346 a cycle, so the core's own DC does not wait for the output's coupling
+         * capacitor: inc / 2^32 cycles a sample) */
+        a = vdc_wsc(wa, pha, inca, pw) + ga - gdc_a;
+        b = vdc_wsc(wb, phb, incb, pw) + gb - gdc_b;
         ga = na < pha && wa != 3u ? 14746 : ga > 4600 ? 4600 : 0;
         gb = nb < phb && wb != 3u ? 14746 : gb > 4600 ? 4600 : 0;
         pha = na;
@@ -158,7 +162,7 @@ static void vdc_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         vdc_svf(&lp, b, &l1b, &l2b, &b);
         /* the fixed ~7.6 kHz pole, the same on both channels (linear: on their mix, one pole for two) */
         pa += vd_step(VDC_POLE, mulq15(a, la) + mulq15(b, lb) - pa);
-        out[i] += voice_amp(vd_dc(&s->f[11], pa), m, i);
+        out[i] += VD_OUT(vd_dc(&s->f[11], pa), m, i, 56);
     }
     s->ph[0] = pha;
     s->ph[1] = phb;

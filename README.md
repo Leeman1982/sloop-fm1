@@ -1,3 +1,19 @@
+# VIDEODROME — for the M-VAVE FM-1 and SMK-37
+
+**CIVIC-TV, channel 83.** Six classic synthesizers from [xtro](https://github.com/leeman1982/xtro) — Minimoog Model D,
+Prophet-5, Jupiter-8, OB-X, MS-20, CS-80 — rebuilt a circuit stage at a time (the transistor ladder, the CEM3320, the
+IR3109, the SEM state-variable, the KORG35 pair, the IG00156), on SLOOP 2.8's live groovebox, in the look of an
+early-80s cable channel: CRT phosphor and raster, colour bars, a test card. Songs chain from the editor in one line
+(`A4 B8 C8x2 D4`). Builds for the FM-1 and the SMK-37 (Pro, Elite, MKE-P37).
+
+**→ [VIDEODROME.md](VIDEODROME.md)**: the six models, their controls and sounds, the look, the chain builder, install,
+where it differs from the real instruments, what it cost. **Untested on hardware so far.**
+
+Everything below is SLOOP's own README: all of it still applies (Videodrome keeps SLOOP's twelve engines, its
+sequencer, effects, MIDI and editor, and its flash layout: SLOOP's projects and backups load as they are).
+
+---
+
 <p align="center"><img src="assets/logo/sloop-logo.png" alt="SLOOP" width="420"></p>
 
 <p align="center"><b>A live groovebox firmware for the M-VAVE FM-1 — for any style.</b><br>

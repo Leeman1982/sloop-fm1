@@ -101,7 +101,7 @@ static void vdp_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
             Z.G = vd_gexp(u + ((ob * pmo) >> 9)) << 13;   /* (+-2.3 octaves at 127): the cells' gain (Q28) moved at audio
                                                             * rate, the feedback solve stays the tick's */
         }
-        out[i] += voice_amp(vd_dc(&s->f[11], vd_cas4(&Z, &C, (x * 3) >> 2, VDZ_CEM, &y2) << 1), m, i);
+        out[i] += VD_OUT(vd_dc(&s->f[11], vd_cas4(&Z, &C, (x * 3) >> 2, VDZ_CEM, &y2) << 1), m, i, 40);
     }
     s->ph[0] = pha;
     s->ph[1] = phb;

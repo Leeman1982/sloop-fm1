@@ -7,7 +7,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SLOOP Editor</title>
+<title>VIDEODROME Editor</title>
 <!--PWA--><link rel="manifest" href="../sloop.webmanifest"><meta name="theme-color" content="#000000"><link rel="icon" href="../icon-192.png"><!--/PWA-->
 <style>
   /* SLOOP 2.4 editor: the FM-1's screen on a big display. Black, the four track colours, the device's own
@@ -18,7 +18,10 @@
   @font-face { font-family: "Fukiai"; src: url("fukiai.ttf") format("truetype"); font-display: block; unicode-range: U+EA00-EB09; }
   :root {
     --bg: #000; --s1: #0b0b0e; --s2: #1a1a1e; --s3: #36363c; --line: #232329; --dim: #76767e; --fg2: #c4c4cc; --fg: #f2f2f2;
-    --red: #ff2c34; --t1: #287cff; --t2: #1ecc70; --t3: #ffc618; --t4: #ff621a; --trk: var(--t1);
+    /* VIDEODROME: the tracks in the colour bars' cyan, magenta and yellow, the drums in the title card's orange (the
+       firmware's gfx.c TE_COL_DEF); --vd the wordmark's orange, --osd a 1983 set's green on-screen digits */
+    --red: #ff2c34; --t1: #00cce0; --t2: #e030c8; --t3: #e8d400; --t4: #ff6818; --trk: var(--t1);
+    --vd: #ff6818; --osd: #50ff60; --vdr: #c81428; --vdc: #0096aa;
     --font: "SLOOP Terminus", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
     color-scheme: dark;
   }
@@ -92,6 +95,33 @@
           border-right: 1px solid var(--line); overflow-y: auto; }
   .brand { display: flex; align-items: flex-end; gap: 10px; color: var(--fg); text-decoration: none; }
   .brand svg { width: 132px; height: auto; display: block; }
+  /* VIDEODROME: the wordmark as the title card has it, hot orange with a misconverged red and cyan ghost, and the
+     channel in a set's on-screen green; the page under a CRT's raster (body.crt, the CRT switch: on by default) */
+  .brand .vdmark { color: var(--vd); font-size: 32px; line-height: 32px; text-transform: none; padding-bottom: 0;
+                   text-shadow: -2px 0 var(--vdr), 2px 0 var(--vdc); }
+  .brand { flex-wrap: wrap; row-gap: 2px; }
+  .brand .osd { color: var(--osd); text-transform: none; }
+  h2 { color: var(--fg); }
+  .card > h2::first-letter { color: var(--vd); }
+  body.crt::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
+    background: repeating-linear-gradient(to bottom, transparent 0, transparent 2px, rgba(0, 0, 0, .22) 2px, rgba(0, 0, 0, .22) 3px),
+                radial-gradient(ellipse at center, transparent 62%, rgba(0, 0, 0, .35) 100%); }
+  @media print { body.crt::after { display: none; } }
+  /* the chain builder: four section pads (the section colours: A..D as the tracks'), the timeline as blocks as long
+     as their bars */
+  .chainpads { display: inline-flex; gap: 4px; }
+  .chainpads button { min-width: 44px; color: #000; text-transform: none; }
+  .chainpads button:nth-child(1) { background: var(--t1); } .chainpads button:nth-child(2) { background: var(--t2); }
+  .chainpads button:nth-child(3) { background: var(--t3); } .chainpads button:nth-child(4) { background: var(--t4); }
+  .chainpads button.empty { opacity: .45; }
+  .chainline { display: flex; gap: 2px; min-height: 40px; margin: 4px 0 6px; border: 1px solid var(--s3); padding: 2px;
+               overflow-x: auto; }
+  .chainline .blk { flex: 0 0 auto; display: flex; flex-direction: column; justify-content: center; padding: 0 4px;
+                    color: #000; cursor: pointer; min-width: 22px; white-space: nowrap; }
+  .chainline .blk small { font-size: 16px; opacity: .7; }
+  .chainline .blk:hover { outline: 2px solid var(--fg); }
+  .chainline .s0 { background: var(--t1); } .chainline .s1 { background: var(--t2); }
+  .chainline .s2 { background: var(--t3); } .chainline .s3 { background: var(--t4); }
   .brand span { color: var(--dim); text-transform: lowercase; padding-bottom: 2px; }
   .tabs { display: flex; flex-direction: column; gap: 2px; }
   .tabs .navh { color: var(--s3); margin: 14px 0 4px 12px; text-transform: lowercase; }
@@ -541,6 +571,11 @@
   .slot.used .st { color: var(--t2); }
   .slot .bar { margin: 0; }
   #sysinfo th { padding-right: 24px; }
+  .dawmap { display: flex; flex-wrap: wrap; gap: 8px 32px; }
+  .dawmap h3 { margin: 8px 0 4px; font-weight: 400; color: var(--dim); text-transform: lowercase; }
+  .dawmap td { padding: 1px 8px 1px 0; }
+  .dawmap input[type=number] { width: 4.5em; }
+  .dawmap tr.chg td:first-child { color: var(--trk); }
   #sysinfo td { color: var(--fg); }
   .fm6ops { overflow-x: auto; }
   .fm6list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px; margin: 6px 0 10px; }
@@ -846,24 +881,9 @@
 <body>
 <div class="app">
   <aside class="side">
-    <a class="brand" href="#sound" aria-label="SLOOP">
-      <svg viewBox="44 24 572 186" role="img" aria-hidden="true">
-        <path d="M59.29 200.71 A100.00 100.00 0 1 1 200.71 200.71" fill="none" stroke="#F2F2F2" stroke-width="12" stroke-linecap="round"/>
-        <rect x="95" y="46" width="10" height="136" rx="5" fill="#F2F2F2"/>
-        <polygon points="111,50 111,50 131.34,75 111,75" fill="#287CFF"/>
-        <polygon points="111,81 136.22,81 156.56,106 111,106" fill="#1ECC70"/>
-        <polygon points="111,112 161.44,112 181.78,137 111,137" fill="#FFC618"/>
-        <polygon points="111,143 186.66,143 207,168 111,168" fill="#FF621A"/>
-        <rect x="66" y="192" width="128" height="12" rx="6" fill="#F2F2F2"/>
-        <path d="M290.88 130 A14.88 15 0 1 1 304.37 108.66" fill="none" stroke="#F2F2F2" stroke-width="12" stroke-linecap="round"/>
-        <path d="M290.88 130 A14.88 15 0 1 1 277.39 151.34" fill="none" stroke="#F2F2F2" stroke-width="12" stroke-linecap="round"/>
-        <line x1="337.76" y1="68" x2="337.76" y2="160" stroke="#F2F2F2" stroke-width="12" stroke-linecap="round"/>
-        <circle cx="399.76" cy="130" r="30" fill="none" stroke="#F2F2F2" stroke-width="12"/>
-        <circle cx="489.76" cy="130" r="30" fill="none" stroke="#F2F2F2" stroke-width="12"/>
-        <circle cx="579.76" cy="130" r="30" fill="none" stroke="#F2F2F2" stroke-width="12"/>
-        <line x1="549.76" y1="130" x2="549.76" y2="196" stroke="#F2F2F2" stroke-width="12" stroke-linecap="round"/>
-      </svg>
-      <span>editor</span>
+    <a class="brand" href="#sound" aria-label="VIDEODROME">
+      <span class="vdmark" aria-hidden="true">VIDEODROME</span>
+      <span>editor <b class="osd">ch 83</b></span>
     </a>
     <nav class="tabs" id="tabs" role="tablist" aria-orientation="vertical">
       <div class="navh" data-t="navTrack"></div>
@@ -881,6 +901,7 @@
       <button role="tab" data-tab="projects" data-t="projects" data-ic="symbol_folder"></button>
       <button role="tab" data-tab="settings" data-t="tabSettings" data-ic="symbol_cog"></button>
       <button role="tab" data-tab="theme" data-t="tabTheme" data-ic="ui_knob"></button>
+      <button role="tab" data-tab="daw" data-t="tabDaw" data-ic="ui_slider_vertical" hidden></button>
     </nav>
     <div class="devcard">
       <div class="devline"><span class="led" id="led"></span><span data-t="fm1"></span></div>
@@ -888,9 +909,10 @@
       <span id="live"></span>
       <span id="mock" hidden data-t="mock"></span>
       <button id="connect" class="pri" data-t="connect" data-ic="port_usb_c"></button>
-      <div class="links"><a class="dim" href="../installer/" data-t="installer"></a><button class="lang" id="lang"></button></div>
+      <div class="links"><a class="dim" href="../installer/" data-t="installer"></a><button class="lang" id="lang"></button>
+        <button class="lang" id="crt" aria-pressed="true" title="CRT raster">crt</button></div>
       <button id="install" class="pri" data-t="install" hidden></button>
-      <!--DL--><a class="dim" id="offline" href="sloop-editor.html" download="sloop-editor-2.8.html" data-t="offline"></a><!--/DL-->
+      <!--DL--><a class="dim" id="offline" href="sloop-editor.html" download="sloop-editor-1.0.html" data-t="offline"></a><!--/DL-->
     </div>
   </aside>
 
@@ -1027,6 +1049,19 @@
         <p class="dim" data-t="songHelp"></p>
         <p class="bad" id="songerr" hidden></p>
         <div id="songbody" hidden>
+          <!-- VIDEODROME: the chain builder (CHAIN): tap the sections, type a chain, or start from a song shape -->
+          <div class="chainbox">
+            <p class="dim" data-t="chainHelp"></p>
+            <p class="bar"><span data-t="chainPads"></span> <span class="chainpads" id="chainpads"></span>
+              <label><span data-t="songBars"></span> <select id="chainbars"></select></label>
+              <button type="button" id="chainclear" data-t="chainClear"></button></p>
+            <p class="bar"><input type="text" class="grow" id="chaintext" spellcheck="false" autocomplete="off" placeholder="A4 B8 C8x2 B8 D4">
+              <button type="button" id="chainset" data-t="chainSet"></button>
+              <select id="chaintpl"><option value="" data-t="chainTpl"></option></select></p>
+            <p class="bad" id="chainerr" hidden></p>
+            <div class="chainline" id="chainline" aria-label="chain"></div>
+            <p class="dim" id="chaininfo"></p>
+          </div>
           <table class="song"><thead><tr><th>#</th><th data-t="songSection"></th><th data-t="songBars"></th><th data-t="songTimes"></th><th></th></tr></thead>
             <tbody id="songrows"></tbody></table>
           <p class="bad" id="songempty" data-t="songEmpty" hidden></p>
@@ -1154,6 +1189,11 @@
         <h2 data-t="system" data-ic="symbol_cog"></h2>
         <table id="sysinfo"></table>
       </div>
+      <div class="card" id="stockcard" hidden>
+        <h2 data-t="stockTitle"></h2>
+        <p class="dim" data-t="stockHelp"></p>
+        <p class="bar"><button type="button" id="stockrel" data-t="stockBtn"></button></p>
+      </div>
     </section>
 
     <section class="panel" id="p-theme" data-tab="theme" hidden>
@@ -1191,7 +1231,23 @@
       </div>
     </section>
 
-    <footer>SLOOP, based on Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>. GPL-3.0.<br>
+    <section class="panel" id="p-daw" data-tab="daw" data-dev hidden>
+      <div class="card">
+        <h2 data-t="dawTitle" data-ic="ui_slider_vertical"></h2>
+        <p class="dim" data-t="dawHelp"></p>
+        <p class="bar" id="dawset"></p>
+        <p class="bar"><button type="button" id="dawsend" class="pri" data-t="dawSend" data-ic="symbol_upload"></button>
+          <button type="button" id="dawread" data-t="dawRead"></button>
+          <button type="button" id="dawdef" data-t="dawDefault"></button>
+          <button type="button" id="dawsave" data-t="dawSave" data-ic="symbol_download"></button>
+          <button type="button" id="dawopen" data-t="dawOpen" data-ic="symbol_folder_open"></button>
+          <input id="dawfile" type="file" accept=".json,application/json" hidden>
+          <span class="dim" id="dawstate"></span></p>
+        <div class="dawmap" id="dawmap"></div>
+      </div>
+    </section>
+
+    <footer>VIDEODROME: six component-level models from xtro on SLOOP by isod89, based on Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>. GPL-3.0.<br>
       <span data-t="foot"></span> M-VAVE and FM-1 are trademarks of their respective owners.<br>
       <a href="FUKIAI-LICENSE.txt" data-t="iconsCredit"></a> · <span data-t="fontCredit"></span></footer>
   </main>
@@ -1227,7 +1283,8 @@ const CMD = { INFO: 1, GET: 2, SET: 3, DUMP: 4, DESC: 5, STEP_GET: 6, STEP_SET: 
   FILL_GET: 41, FILL_SET: 42,                         /* v8 (SLOOP 2.4): the steps' fill conditions */
   FM6_GET: 68, FM6_PUT: 69, FM6_LIST: 70, FM6_ERASE: 71,    /* v9 (SLOOP 2.4): the FM6 engine's patches (Felucca 1.0's numbers) */
   DSYN_LIST: 72, DSYN_GET: 73, DSYN_PUT: 74, DSYN_STORE: 75, DSYN_PLAY: 76,   /* v10 (SLOOP 2.5): the SYN drum kits */
-  LIVE: 77 };                                         /* v12 (SLOOP 2.7): the LIVE page (firmware editor_live.c) */
+  LIVE: 77,                                          /* v12 (SLOOP 2.7): the LIVE page (firmware editor_live.c) */
+  DAW_GET: 80, DAW_PUT: 81, STOCK_RELEASE: 82 };                         /* SMK-37: DAW mode's settings and map (no reply: not this device) */
 /* v12: LIVE ops (firmware editor_live.c) and the layers its keys reach (seq.c LY_*: 5 SEL, 6 GLO, 7 SAVE) */
 const LIVE = { STATE: 0, PLAY: 1, KEY: 2, FX: 3, REC: 4, UNDO: 5, LY_KEY: 5, LY_MIX: 6, LY_SONG: 7, NFX: 27,
   /* (2.7) the page's own (editor_live.c 6..12): ROLL and ERASE while held, the pattern's tools, a chain of sections, THROW,
@@ -1334,6 +1391,85 @@ const fillGet = (bytes, i) => ((bytes[i >> 2] || 0) >> (2 * (i & 3))) & 3;
 const fillSet = (bytes, i, c) => { bytes[i >> 2] = (bytes[i >> 2] & ~(3 << (2 * (i & 3)))) | ((c & 3) << (2 * (i & 3))); };
 /* frames the device sends on its own (while WATCH is on); never replies */
 const PUSH = new Set([CMD.CHANGED, CMD.RELOAD, CMD.STEP_CHANGED, CMD.TRACK_CHANGED]);
+/* SMK-37 DAW mode (firmware smk_daw.h, editor_daw.c): what the knobs, faders, pads, buttons and wheels send while the
+   keyboard is a controller. 71 entries (type, number, channel 0 = MAIN, the device's CHANNEL), in this order: the 8 knobs
+   K1..K8 of bank A then B, the 4 faders of bank A then B, the 16 pads of bank A then B (PAD 1..8 the top row, 9..16 the
+   bottom row), 13 buttons, the pitch wheel, the mod wheel. The DEFAULT map as the firmware's daw_default */
+const DAW = (() => {
+  const N = 71, KNOB0 = 0, FADER0 = 16, PAD0 = 24, BTN0 = 56, PITCH = 69, MOD = 70;
+  const T = { OFF: 0, CC: 1, TOG: 2, NOTE: 3, MMC: 4, BEND: 5 };
+  const TYPE_NAMES = ["OFF", "CC", "CC TOGGLE", "NOTE", "MMC", "PITCH BEND"];
+  const TYPES = [[T.CC, T.OFF], [T.CC, T.OFF], [T.NOTE, T.CC, T.TOG, T.OFF], [T.CC, T.TOG, T.NOTE, T.MMC, T.OFF],
+    [T.BEND, T.CC, T.OFF], [T.CC, T.OFF]];          /* per kind: knob, fader, pad, button, pitch wheel, mod wheel */
+  const KIND = ["knobs", "faders", "pads", "buttons", "wheels", "wheels"];
+  const MMC = ["", "STOP", "PLAY", "DEFERRED PLAY", "FAST FORWARD", "REWIND", "RECORD", "RECORD EXIT", "RECORD PAUSE", "PAUSE",
+    "EJECT", "CHASE", "ERROR RESET", "MMC RESET"];
+  const BTN = ["<", ">", "SEQ PLAY", "SEQ REC", "SEQ", "FX", "PARA", "ARP", "NOTE REPEAT", "SCALE", "CHORD", "GLOBE", "BT"];
+  const BTN_CC = [110, 111, 115, 117, 112, 113, 114, 118, 119, 85, 86, 87, 88];
+  const kind = (i) => i < FADER0 ? 0 : i < PAD0 ? 1 : i < BTN0 ? 2 : i < PITCH ? 3 : i === PITCH ? 4 : 5;
+  function def(i) {
+    if (i < FADER0) return { type: T.CC, num: i < 8 ? 70 + i : 102 + i - 8, ch: 0 };
+    if (i < PAD0) return { type: T.CC, num: 20 + i - FADER0, ch: 0 };
+    if (i < BTN0) { const p = (i - PAD0) % 16, b = (i - PAD0) >> 4; return { type: T.NOTE, num: 36 + 16 * b + (p >= 8 ? p - 8 : p + 8), ch: 10 }; }
+    if (i < PITCH) return { type: T.CC, num: BTN_CC[i - BTN0], ch: 0 };
+    return i === PITCH ? { type: T.BEND, num: 0, ch: 0 } : { type: T.CC, num: 1, ch: 0 };
+  }
+  const ok = (i, e) => i >= 0 && i < N && !!e && TYPES[kind(i)].includes(e.type) && Number.isInteger(e.num) && Number.isInteger(e.ch) &&
+    e.ch >= 0 && e.ch <= 16 && (e.type === T.MMC ? e.num >= 1 && e.num < MMC.length : e.num >= 0 && e.num <= 127);
+  const defaults = () => Array.from({ length: N }, (_, i) => def(i));
+  const same = (a, b) => a.type === b.type && a.num === b.num && a.ch === b.ch;
+  const changed = (map) => map.reduce((n, e, i) => n + (same(e, def(i)) ? 0 : 1), 0);
+  const bank = (i) => i < FADER0 ? (i >> 3) : i < PAD0 ? ((i - FADER0) >> 2) : i < BTN0 ? ((i - PAD0) >> 4) : -1;
+  function name(i) {                                 /* "K3", "FADER 2", "PAD 12", "SEQ PLAY", "PITCH WHEEL" (no bank) */
+    if (i < FADER0) return "K" + ((i & 7) + 1);
+    if (i < PAD0) return "FADER " + (((i - FADER0) & 3) + 1);
+    if (i < BTN0) return "PAD " + (((i - PAD0) & 15) + 1);
+    if (i < PITCH) return BTN[i - BTN0];
+    return i === PITCH ? "PITCH WHEEL" : "MOD WHEEL";
+  }
+  const label = (i) => name(i) + (bank(i) >= 0 ? " " + "AB"[bank(i)] : "");   /* + the bank: "K3 B" */
+  const noteName = (n) => ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][n % 12] + (Math.floor(n / 12) - 1);
+  /* a new type: the number kept when it fits (MMC: PLAY; back from MMC: the default's) */
+  function setType(i, e, t) {
+    if (t === T.MMC && !(e.num >= 1 && e.num < MMC.length)) e.num = 2;
+    else if (e.type === T.MMC && t !== T.MMC) e.num = def(i).num || 64;
+    e.type = t;
+    return e;
+  }
+  /* DAW_PUT's arguments: the settings {on, ch, local, user, rel} and (map: 71 entries) the USER map */
+  function putArgs(st, map = null) {
+    const a = [st.on ? 1 : 0, Math.max(1, Math.min(16, st.ch | 0)), st.local ? 1 : 0, st.user ? 1 : 0, st.rel ? 1 : 0];
+    if (map) { a.push(N); for (let i = 0; i < N; i++) { const e = ok(i, map[i]) ? map[i] : def(i); a.push(e.type, e.num, e.ch); } }
+    return a;
+  }
+  /* a DAW_GET / DAW_PUT reply: which (0 DEFAULT, 1 USER), the settings, the map */
+  function parseReply(a) {
+    const r = new Reader(a), o = { which: r.b(), fmt: r.b(), on: r.b(), ch: r.b(), local: r.b(), user: r.b(), rel: r.b(), map: [] };
+    const n = r.b();
+    for (let i = 0; i < n; i++) o.map.push({ type: r.b(), num: r.b(), ch: r.b() });
+    for (let i = o.map.length; i < N; i++) o.map.push(def(i));
+    o.map = o.map.slice(0, N).map((e, i) => ok(i, e) ? e : def(i));
+    return o;
+  }
+  /* a file: {format, version, channel, knobs, map: [{control, type, number, channel}]}; read back by the controls' names */
+  function toFile(st, map) {
+    return { format: "sloop-smk37-daw-map", version: 1, channel: st.ch, knobs: st.rel ? "RELATIVE" : "ABSOLUTE",
+      map: map.map((e, i) => ({ control: label(i), type: TYPE_NAMES[e.type], number: e.num, channel: e.ch || "MAIN" })) };
+  }
+  function fromFile(o) {
+    if (!o || o.format !== "sloop-smk37-daw-map" || !Array.isArray(o.map)) throw new Error("not a DAW map");
+    const map = defaults(), at = new Map(map.map((_, i) => [label(i), i]));
+    for (const x of o.map) {
+      const i = at.get(x && x.control), t = TYPE_NAMES.indexOf(x && x.type);
+      if (i === undefined || t < 0) continue;
+      const e = { type: t, num: x.number | 0, ch: x.channel === "MAIN" ? 0 : x.channel | 0 };
+      if (ok(i, e)) map[i] = e;
+    }
+    return { map, ch: o.channel >= 1 && o.channel <= 16 ? o.channel | 0 : null, rel: o.knobs === "RELATIVE" ? 1 : o.knobs === "ABSOLUTE" ? 0 : null };
+  }
+  return { N, KNOB0, FADER0, PAD0, BTN0, PITCH, MOD, T, TYPE_NAMES, TYPES, KIND, MMC, BTN, kind, def, ok, defaults, same, changed,
+    bank, name, label, noteName, setType, putArgs, parseReply, toFile, fromFile };
+})();
 /* user preset bank: name 1..12 printable ASCII, a 16-step pattern of (note, flags 1 acc 2 slide 4 tie) */
 const UP = { NAME_MAX: 12, PAT: 16, LIST_MAX: 16 };
 const F = { INT: 0, PCT: 1, BIPCT: 2, TIME: 3, LFOHZ: 4, CUTOFF: 5, DB: 6, SEMI: 7, ENUM: 8, BPM: 9, NOTE: 10, ONOFF: 11, OCT: 12, STEPS: 13,
@@ -1561,6 +1697,9 @@ const parse = {
   [CMD.DSYN_PUT](a) { return { k: a[0], part: a[1], rc: a[2] }; },
   [CMD.DSYN_STORE](a) { return { rc: a[0] }; },
   [CMD.DSYN_PLAY](a) { return { k: a[0], lane: a[1], rc: a[2] }; },
+  [CMD.DAW_GET](a) { return DAW.parseReply(a); },
+  [CMD.DAW_PUT](a) { return DAW.parseReply(a); },
+  [CMD.STOCK_RELEASE](a) { return { rc: a[0] }; },
 };
 
 /* a name the device accepts: printable ASCII, 1..12 characters */
@@ -1643,6 +1782,11 @@ const req = {
   dsynCopy: (k, src) => [CMD.DSYN_PUT, [k & 0x7F, 17, ...pack7(Uint8Array.of(src & 255))]],
   dsynStore: () => [CMD.DSYN_STORE, []],
   dsynPlay: (k, lane, vel = 110) => [CMD.DSYN_PLAY, [k & 0x7F, lane & 0x7F, Math.max(1, Math.min(127, vel | 0))]],
+  /* SMK-37: DAW mode. which 0 the DEFAULT map, 1 the USER map; put: the settings, and the USER map with map */
+  dawGet: (which = 1) => [CMD.DAW_GET, [which ? 1 : 0]],
+  dawPut: (st, map = null) => [CMD.DAW_PUT, DAW.putArgs(st, map)],
+  /* SMK-37: erase the stock firmware's marker (it rebuilds its factory mapping); rc 0 done, 1 none, 3 playing */
+  stockRelease: () => [CMD.STOCK_RELEASE, []],
   /* v12: LIVE op [, args]: every reply is the live state (parse[CMD.LIVE]) */
   live: (op, ...args) => [CMD.LIVE, [op & 0x7F, ...(args.length ? args : [0]).map((x) => x & 0x7F)]],
 };
@@ -1668,6 +1812,8 @@ function replyMatches(cmd, args, a) {
     case CMD.FM6_ERASE: return a[0] === args[0];
     case CMD.DSYN_GET: return a[0] === args[0];
     case CMD.DSYN_PUT: case CMD.DSYN_PLAY: return a[0] === args[0] && a[1] === args[1];
+    case CMD.DAW_GET: return a[0] === args[0];
+    case CMD.DAW_PUT: return a[0] === 1;
     case CMD.LIVE: return a[0] === args[0];
     default: return true;
   }
@@ -2950,7 +3096,7 @@ function makeMockDevice(opt = {}) {
     E("OUT", ["KEYS", "SEQ"], 0), E("SYNC", ["INT", "USB", "TRS"], 0), E("IN", ["NOTES", "CLOCK", ...Array.from({ length: 16 }, (_, k) => `CH ${k + 1}`)], 0), D("CPU", F.INT, 0, 0, 0),
     D("SECT", F.INT, 1, 4, 1), E("NAME", NDASH, 0), E("LOAD", NGO, 0), E("SAVE", NGO, 0),
     E("ENG", ["ANALOG", "DIGITAL", "PHASE", "LOFI", "SAMPLE", "VOICE", "TRIO", "WHEEL",
-      "GRAIN", "FM6", "PHYS", "NOISE"], 0), E("SET", NGO, 0),
+      "GRAIN", "FM6", "PHYS", "NOISE", "MODEL D", "P-5", "JP-8", "OB-X", "MS-20", "CS-80"], 0), E("SET", NGO, 0),
     E("CLRSQ", NGO, 0), E("INIT", NGO, 0),
     E("CH4", ["OFF", ...Array.from({ length: 16 }, (_, i) => String(i + 1))], 10), D("LVL", F.INT, 0, 127, 100), D("REV", F.INT, 0, 127, 16),
     D("DUST", F.PCT, 0, 127, 0), D("DUCK", F.PCT, 0, 127, 0), D("FILT", F.FILT, -64, 63, 0),
@@ -3114,6 +3260,19 @@ function makeMockDevice(opt = {}) {
         P("NZ SNARE", [0, 20, 90, 30, 64, 0, 0, 0], [0, 60, 0, 44], 0),
         P("BITCRUSH", [0, 40, 90, 40, 64, 0, 0, 100], [0, 70, 110, 40], 0),
         P("RADIO", [2, 20, 70, 90, 64, 0, 60, 48], [10, 70, 120, 50], 0)] },
+    /* VIDEODROME: the six component models (firmware eng_vd_*.c, engines 12..17), as their DESC and NAMES give them */
+    { name: "MODEL D", titles: ["OSC", "LADDER"], edit: [E("WAVE", ["TRI", "SHARK", "SAW", "SQUARE", "WIDE", "NARROW"], 2), D("DTN", F.INT, 0, 127, 8, null, "ct"), D("OSC3", F.PCT, 0, 127, 64), D("NOIS", F.PCT, 0, 127, 0), D("CUT", F.CUTOFF, 0, 127, 50), D("EMPH", F.PCT, 0, 127, 40), D("DRV", F.PCT, 0, 127, 64), E("KBD", ["OFF", "1/3", "2/3", "FULL"], 2)],
+      presets: [P("MOOG BASS", [2, 7, 90, 0, 30, 60, 70, 2], [0, 62, 70, 0], 1), P("SUB BASS", [0, 0, 110, 0, 22, 30, 50, 1], [0, 70, 100, 0], 1), P("ACID BASS", [3, 0, 0, 0, 30, 118, 60, 2], [0, 52, 0, 0], 1), P("FUNK BASS", [3, 9, 70, 0, 42, 80, 64, 2], [0, 46, 50, 0], 1), P("GROWL BASS", [2, 18, 64, 0, 24, 100, 100, 1], [0, 70, 80, 1], 1), P("MOOG LEAD", [2, 12, 0, 0, 84, 90, 70, 3], [0, 70, 110, 40], 1), P("TB LEAD", [3, 0, 0, 0, 55, 110, 60, 3], [0, 60, 70, 30], 1), P("FIFTH LEAD", [2, 127, 0, 0, 75, 60, 60, 3], [0, 70, 110, 40], 1), P("SCREAM", [2, 6, 0, 0, 70, 124, 110, 3], [0, 70, 110, 40], 1), P("MOOG BRASS", [2, 10, 50, 0, 40, 30, 80, 2], [30, 70, 100, 40], 1), P("SOLO SAX", [5, 4, 0, 10, 52, 40, 76, 3], [16, 60, 100, 30], 1), P("SELF-OSC", [0, 0, 0, 0, 80, 127, 0, 3], [0, 70, 110, 50], 1), P("NOISE SWP", [0, 0, 0, 127, 10, 100, 60, 0], [60, 100, 100, 60], 1), P("LONG LIVE", [1, 9, 80, 0, 26, 74, 96, 1], [0, 86, 90, 1], 1), P("MAX RENN", [2, 5, 100, 0, 34, 50, 88, 2], [2, 60, 80, 1], 1), P("SEQ PLUCK", [2, 7, 0, 0, 30, 70, 60, 2], [0, 40, 0, 1], 1)] },
+    { name: "P-5", titles: ["OSC", "CEM3320"], edit: [E("OSC A", ["SAW", "PULSE", "S+P", "SYN SAW", "SYN S+P"], 0), E("OSC B", ["SAW", "TRI", "PULSE", "S+P", "OFF"], 0), D("B PIT", F.SEMI, -24, 24, 0), D("PW", F.PCT, 0, 127, 64), D("CUT", F.CUTOFF, 0, 127, 60), D("RES", F.PCT, 0, 127, 20), D("PM ENV", F.PCT, 0, 127, 0), D("PM OSB", F.PCT, 0, 127, 0)],
+      presets: [P("P5 BRASS", [0, 0, 0, 64, 38, 20, 0, 0], [28, 70, 96, 40], 0), P("SYNC LEAD", [3, 4, 0, 64, 70, 30, 70, 0], [0, 70, 100, 40], 1), P("POLY BASS", [0, 2, -12, 50, 30, 50, 0, 0], [0, 56, 60, 30], 0), P("DEEP BASS", [2, 0, -12, 64, 22, 30, 0, 0], [0, 66, 90, 20], 1), P("GROWL BASS", [0, 0, -12, 64, 26, 60, 0, 40], [0, 60, 80, 20], 1), P("P5 PAD", [0, 0, 0, 64, 50, 10, 0, 0], [80, 90, 110, 90], 0), P("GLASS PAD", [1, 1, 12, 40, 70, 40, 0, 0], [70, 90, 100, 90], 0), P("PWM STRING", [1, 2, 0, 50, 64, 10, 0, 0], [60, 80, 110, 80], 0), P("P5 STAB", [0, 0, 7, 64, 36, 40, 0, 0], [0, 50, 20, 30], 0), P("E.PIANO", [1, 1, 12, 20, 40, 10, 0, 0], [0, 80, 40, 50], 0), P("CLAV FUNK", [1, 4, 0, 24, 46, 30, 0, 0], [0, 44, 0, 20], 0), P("BELL PLUCK", [0, 1, 19, 64, 60, 20, 30, 50], [0, 70, 0, 60], 0), P("CIVIC TV", [4, 2, 7, 30, 44, 54, 56, 20], [0, 80, 60, 50], 0), P("NEW FLESH", [3, 0, -5, 64, 30, 70, 90, 60], [40, 90, 90, 70], 0), P("RESO LEAD", [0, 4, 0, 64, 60, 112, 0, 0], [0, 70, 110, 40], 1), P("FILT SWEEP", [0, 0, 7, 64, 14, 90, 0, 0], [90, 100, 110, 80], 0)] },
+    { name: "JP-8", titles: ["VCO", "IR3109"], edit: [E("VCO1", ["TRI", "SAW", "PULSE", "SQUARE", "SYN SAW", "SYN SQR"], 1), E("VCO2", ["SINE", "SAW", "PULSE", "NOISE"], 1), D("V2 PIT", F.SEMI, -24, 24, 0), D("XMOD", F.PCT, 0, 127, 0), D("CUT", F.CUTOFF, 0, 127, 60), D("RES", F.PCT, 0, 127, 20), D("HPF", F.PCT, 0, 127, 0), E("SLOPE", ["12DB", "24DB"], 1)],
+      presets: [P("JP8 BRASS", [1, 1, 0, 0, 40, 20, 0, 1], [24, 70, 96, 40], 0), P("LUSH PAD", [1, 1, 0, 0, 56, 10, 20, 1], [80, 90, 112, 90], 0), P("STRING PAD", [2, 1, 12, 0, 60, 6, 40, 0], [70, 80, 112, 80], 0), P("XMOD BELL", [0, 0, 19, 70, 80, 10, 30, 1], [0, 80, 0, 70], 0), P("XMOD LEAD", [1, 0, 7, 40, 70, 30, 0, 1], [0, 70, 110, 40], 1), P("SYNC LEAD", [4, 1, 12, 0, 74, 30, 0, 1], [0, 70, 110, 40], 1), P("JP8 BASS", [1, 2, -12, 0, 30, 40, 0, 1], [0, 56, 70, 20], 1), P("XMOD BASS", [1, 0, -12, 50, 34, 30, 0, 1], [0, 56, 70, 20], 1), P("BRIGHT PAD", [3, 1, 7, 0, 80, 20, 50, 0], [60, 80, 110, 80], 0), P("POLY STAB", [1, 1, 0, 0, 40, 30, 0, 1], [0, 46, 10, 30], 0), P("GLASS PLUK", [2, 0, 12, 20, 60, 30, 40, 0], [0, 60, 0, 60], 0), P("ARENA ARP", [1, 1, 0, 0, 46, 40, 0, 1], [0, 70, 50, 50], 0), P("NICKI", [2, 1, 12, 10, 52, 30, 30, 1], [50, 90, 100, 90], 0), P("SPECTACLE", [0, 0, 31, 90, 60, 50, 40, 1], [10, 90, 40, 80], 0), P("NOISE SWP", [0, 3, 0, 0, 20, 60, 0, 1], [90, 100, 110, 80], 0), P("24DB LEAD", [3, 1, 0, 0, 60, 60, 0, 1], [0, 70, 110, 40], 1)] },
+    { name: "OB-X", titles: ["VCO", "SEM"], edit: [E("VCO1", ["SAW", "PULSE", "S+P"], 0), E("VCO2", ["SAW", "PULSE", "S+P", "SYN SAW", "SYN PUL"], 0), D("V2 PIT", F.SEMI, -24, 24, 0), D("PW", F.PCT, 0, 127, 64), D("CUT", F.CUTOFF, 0, 127, 60), D("RES", F.PCT, 0, 127, 20), D("XMOD", F.PCT, 0, 127, 0), D("SLOP", F.PCT, 0, 127, 50)],
+      presets: [P("OBX BRASS", [0, 0, 0, 64, 36, 30, 0, 50], [20, 70, 100, 40], 0), P("JUMP STAB", [0, 0, 0, 64, 40, 20, 0, 50], [0, 60, 70, 34], 0), P("1-FINGER", [0, 0, 7, 64, 40, 30, 0, 50], [10, 70, 96, 40], 0), P("PUNCH BASS", [1, 0, -12, 50, 28, 40, 0, 40], [0, 50, 60, 20], 1), P("FAT BASS", [0, 0, 0, 64, 30, 30, 0, 80], [0, 60, 90, 20], 1), P("SYNC LEAD", [0, 3, 12, 64, 70, 30, 0, 40], [0, 70, 110, 40], 1), P("XMOD LEAD", [0, 1, 7, 40, 64, 40, 50, 40], [0, 70, 110, 40], 1), P("UNISON LD", [0, 0, 0, 64, 70, 30, 0, 90], [0, 70, 110, 40], 1), P("STRING PAD", [1, 1, 0, 40, 60, 10, 0, 60], [70, 80, 112, 80], 0), P("WARM PAD", [0, 0, 0, 64, 46, 10, 0, 70], [80, 90, 112, 90], 0), P("HORROR STB", [0, 2, 6, 30, 50, 70, 30, 100], [0, 80, 40, 70], 0), P("HAUNTED", [1, 0, 1, 20, 40, 50, 0, 127], [60, 90, 100, 90], 0), P("VIDEODROME", [2, 3, 7, 50, 34, 64, 40, 90], [30, 90, 90, 80], 0), P("BIANCA", [0, 1, 12, 40, 56, 20, 0, 60], [40, 90, 100, 80], 0), P("CHORD STAB", [0, 0, 0, 64, 44, 20, 0, 50], [0, 40, 0, 30], 0), P("BELL PLUCK", [1, 0, 24, 20, 60, 30, 70, 40], [0, 70, 0, 60], 0)] },
+    { name: "MS-20", titles: ["VCO", "KORG35"], edit: [E("VCO1", ["TRI", "SAW", "PULSE", "NOISE"], 1), E("VCO2", ["SAW", "SQUARE", "PULSE", "RING"], 0), D("PITCH", F.SEMI, -12, 12, 0), D("MIX", F.PCT, 0, 127, 0), D("HPF", F.CUTOFF, 0, 127, 0), D("HPK", F.PCT, 0, 127, 0), D("LPF", F.CUTOFF, 0, 127, 70), D("LPK", F.PCT, 0, 127, 40)],
+      presets: [P("ACID BASS", [1, 0, 0, 0, 0, 0, 30, 100], [0, 50, 20, 20], 1), P("SCRM BASS", [1, 1, -12, 50, 20, 80, 34, 110], [0, 60, 60, 20], 1), P("SUB BASS", [0, 1, -12, 70, 0, 0, 26, 30], [0, 70, 100, 20], 1), P("SCREAM LD", [1, 0, 7, 40, 40, 90, 70, 118], [0, 70, 110, 40], 1), P("RING LEAD", [2, 3, 5, 80, 20, 40, 70, 60], [0, 70, 110, 40], 1), P("HPF SCREAM", [1, 1, 0, 64, 60, 124, 100, 20], [0, 70, 110, 40], 1), P("SELF-OSC", [3, 0, 0, 0, 0, 0, 70, 127], [0, 70, 110, 50], 1), P("LASER PLUK", [1, 1, 12, 64, 30, 60, 60, 110], [0, 30, 0, 20], 1), P("SIREN", [0, 3, 7, 100, 10, 30, 60, 90], [20, 70, 110, 60], 1), P("NOISE SWP", [3, 0, 0, 0, 0, 40, 20, 110], [60, 100, 100, 80], 1), P("METAL HIT", [2, 3, 11, 100, 40, 60, 80, 70], [0, 50, 0, 50], 0), P("BRASS STAB", [1, 0, 0, 64, 10, 20, 40, 50], [0, 50, 30, 30], 0), P("HAUNT PAD", [0, 1, 7, 50, 30, 50, 50, 60], [80, 90, 110, 90], 0), P("FLESH GUN", [1, 3, -7, 90, 30, 100, 50, 120], [0, 80, 40, 60], 1), P("CATHODE", [2, 2, 12, 60, 50, 90, 90, 90], [0, 70, 80, 50], 1), P("SWOOP LEAD", [1, 0, 0, 30, 0, 0, 60, 80], [0, 70, 100, 40], 1)] },
+    { name: "CS-80", titles: ["VCO", "IG00156"], edit: [E("I WAVE", ["SAW", "PULSE", "S+P", "SINE"], 0), E("II WAVE", ["SAW", "PULSE", "S+P", "SINE"], 0), D("II PIT", F.SEMI, -24, 24, 0), D("BAL", F.PCT, 0, 127, 64), D("CUT", F.CUTOFF, 0, 127, 50), D("RES", F.PCT, 0, 127, 30), D("HPF", F.CUTOFF, 0, 127, 0), D("IL", F.BIPCT, -64, 63, 0)],
+      presets: [P("BLADE BRSS", [0, 0, 0, 64, 34, 40, 0, -20], [16, 80, 100, 50], 0), P("TEARS RAIN", [1, 3, 12, 50, 46, 30, 10, -10], [40, 90, 100, 90], 0), P("CS STRINGS", [1, 1, 0, 64, 56, 10, 20, 0], [60, 80, 112, 80], 0), P("CS BRASS", [0, 1, 0, 60, 38, 50, 0, -24], [10, 70, 96, 40], 0), P("YAMAHA PAD", [0, 3, -12, 40, 50, 20, 0, 0], [80, 90, 112, 90], 0), P("SINE ORGAN", [3, 3, 12, 50, 100, 0, 0, 0], [4, 60, 120, 20], 0), P("BELL", [3, 0, 19, 30, 70, 20, 30, 0], [0, 80, 0, 70], 0), P("CS BASS", [0, 1, -12, 50, 28, 50, 0, -10], [0, 60, 70, 20], 1), P("CS LEAD", [2, 0, 0, 64, 60, 60, 0, -10], [0, 70, 110, 40], 1), P("HARPSICH", [1, 1, 12, 50, 70, 20, 40, 0], [0, 60, 0, 50], 0), P("HUMAN VOX", [2, 3, 7, 70, 40, 70, 30, -10], [40, 80, 100, 70], 0), P("RANNOCH", [0, 0, 0, 64, 30, 50, 10, -40], [50, 100, 90, 90], 0), P("SIGNAL", [1, 2, 5, 60, 44, 60, 20, -30], [30, 90, 80, 90], 0), P("TV STATIC", [0, 1, 1, 64, 80, 30, 60, 20], [0, 50, 60, 40], 0), P("WARM BRASS", [0, 0, -12, 40, 32, 30, 0, -16], [20, 80, 100, 50], 0), P("GLIDE LEAD", [0, 0, 7, 64, 56, 40, 0, 0], [0, 70, 110, 40], 1)] },
   ];
   const FM6_E = ENG.findIndex((e) => e.name === "FM6"), FM6_BANK = 27, FM6_NPART = 3;
   const v9 = !opt.legacy && !opt.v3 && !opt.noBackup && !opt.v7 && !opt.v8;   /* SLOOP 2.4: FM6 patches */
@@ -3156,6 +3315,8 @@ function makeMockDevice(opt = {}) {
     settings: mockSettings(),                       /* v6: the settings object (2.5: a PER3 with a song order) */
     dsyn: null, dsynStored: null, dsynPlayed: [],  /* v10: the SYN kits (RAM, flash), the auditions heard */
     ml: null,                                       /* 2.6: the MIDI LEARN map (seq.c ml_tab, 16 x 2 bytes), null: none */
+    daw: { on: 0, ch: 1, local: 0, user: 0, rel: 0, map: DAW.defaults() },   /* SMK-37 (opt.daw): DAW mode */
+    stockTag: true,                                 /* SMK-37: the stock firmware's marker still there */
     bkSnap: null, bkPut: null,
     watch: false, v4: false, lastReq: 0, playing: false,
     /* v12 (LIVE): the transport's start, the sections (A..D: playing, asked for at a time), song mode, SONG REC, fills,
@@ -3680,6 +3841,30 @@ function makeMockDevice(opt = {}) {
         }
         break;
       }
+      case CMD.DAW_GET: case CMD.DAW_PUT: {               /* editor_daw.c (SMK-37 only: opt.daw) */
+        if (!opt.daw) return null;
+        const D = st.daw;
+        if (cmd === CMD.DAW_PUT && a.length >= 5) {
+          if (a[1] >= 1 && a[1] <= 16) D.ch = a[1];
+          if (a[2] <= 1) D.local = a[2];
+          if (a[3] <= 1) D.user = a[3];
+          if (a[4] <= 1) D.rel = a[4];
+          if (a.length >= 6) for (let i = 0; i < Math.min(a[5], DAW.N) && 8 + 3 * i < a.length; i++) {
+            const e = { type: a[6 + 3 * i], num: a[7 + 3 * i], ch: a[8 + 3 * i] };
+            D.map[i] = DAW.ok(i, e) ? e : DAW.def(i);
+          }
+          if (a[0] <= 1) D.on = a[0];
+        }
+        const w = cmd === CMD.DAW_GET && a.length ? (a[0] ? 1 : 0) : 1;
+        b(w); b(1); b(D.on); b(D.ch); b(D.local); b(D.user); b(D.rel); b(DAW.N);
+        (w ? D.map : DAW.defaults()).forEach((e) => { b(e.type); b(e.num); b(e.ch); });
+        break;
+      }
+      case CMD.STOCK_RELEASE:                           /* editor_daw.c (SMK-37 only) */
+        if (!opt.daw) return null;
+        b(st.playing ? 3 : st.stockTag ? 0 : 1);
+        if (!st.playing) st.stockTag = false;
+        break;
       case CMD.SMP_INFO:
         b(st.smp.length); b(SMP.SLOT_SIZE / 1024);
         st.smp.forEach((u) => { b(u.zones); s(u.zones ? u.name : ""); b(u.zones ? Math.ceil(u.len / 1024) : 0); });
@@ -4308,6 +4493,39 @@ const ARR = {
   expand: (rows) => rows.flatMap((r) => Array.from({ length: Math.max(1, r.times | 0) }, () => ({ scene: r.scene, bars: r.bars }))),
 };
 
+/* ------------------------------------------ VIDEODROME: the chain builder --- */
+/* A song as a line of text, "A4 B8 C8x2 D4": a section A..D, its bars (1..64, the last given or 4 when left out),
+   x n times. The same rows as the Song page's table (ARR.group); 16 entries in all (arranger.h ARR_STEPS). The
+   templates are song shapes over the four sections, to start from */
+const CHAIN = {
+  LET: "ABCD",
+  TEMPLATES: [["tplLoop", "A4 B4 C4 D4"], ["tplVerse", "A4 B8 C8 B8 C8 D4 C8"], ["tplBuild", "A8 B8x2 C16 D8 C16"],
+              ["tplMinimal", "A16 B16 A16 C16"], ["tplDrone", "A64"], ["tplScore", "A8 B4 C8 D16 C8 A8"],
+              ["tplBroadcast", "D4 A8 B8 C16 B8 C16 A8 D4"]],
+  /* -> { rows, bad: [tokens not understood], count: entries } */
+  parse(text) {
+    const rows = [], bad = [];
+    let bars = 4;
+    for (const tok of String(text || "").toUpperCase().split(/[\s,;>→-]+/).filter(Boolean)) {
+      const m = /^([A-D])(\d{1,2})?(?:[X*×](\d{1,2}))?$/.exec(tok);
+      if (!m) { bad.push(tok); continue; }
+      const b = m[2] ? +m[2] : bars, n = m[3] ? +m[3] : 1;
+      if (b < 1 || b > ARR.MAX_BARS || n < 1 || n > ARR.STEPS) { bad.push(tok); continue; }
+      bars = b;
+      rows.push({ scene: CHAIN.LET.indexOf(m[1]), bars: b, times: n });
+    }
+    const norm = ARR.group(ARR.expand(rows));
+    return { rows: norm, bad, count: norm.reduce((a, r) => a + r.times, 0) };
+  },
+  format: (rows) => (rows || []).map((r) => CHAIN.LET[r.scene] + r.bars + (r.times > 1 ? "x" + r.times : "")).join(" "),
+  bars: (rows) => (rows || []).reduce((a, r) => a + r.bars * Math.max(1, r.times | 0), 0),
+  /* the song's length at a tempo (4/4 bars), "m:ss" */
+  time(rows, bpm) {
+    const s = Math.round(CHAIN.bars(rows) * 240 / Math.max(20, bpm || 120));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  },
+};
+
 
 /* ------------------------------------- v10 (SLOOP 2.5): the SYN drum kits --- */
 /* A synthesised drum sound is the firmware's dsnd_t (drum_synth.c, tools/gen_drumkits.py), 22 bytes in this order.
@@ -4417,8 +4635,9 @@ const THEME = {
     ["AMBER", [[60, 26, 0], [110, 50, 0], [170, 82, 0], [225, 120, 8], [255, 166, 40]]],
     ["CYAN", [[0, 30, 50], [0, 62, 96], [16, 112, 160], [56, 172, 222], [140, 222, 255]]],
     ["RED", [[52, 8, 8], [100, 18, 14], [170, 36, 26], [226, 64, 48], [255, 112, 92]]],
-    ["MONO", [[40, 40, 40], [80, 80, 80], [130, 130, 130], [186, 186, 186], [226, 226, 226]]]],
-  TRACKS: [[40, 124, 255], [30, 204, 112], [255, 198, 24], [255, 98, 26]],
+    ["MONO", [[40, 40, 40], [80, 80, 80], [130, 130, 130], [186, 186, 186], [226, 226, 226]]],
+    ["CIVIC 83", [[52, 14, 4], [110, 34, 8], [176, 64, 14], [232, 100, 24], [255, 150, 60]]]],   /* VIDEODROME (+ the raster) */
+  TRACKS: [[0, 204, 224], [224, 48, 200], [232, 212, 0], [255, 104, 24]],   /* VIDEODROME: the colour bars' (gfx.c) */
   to565: ([r, g, b]) => ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3),
   from565: (v) => [Math.round((((v >> 11) & 31) * 255) / 31), Math.round((((v >> 5) & 63) * 255) / 63), Math.round(((v & 31) * 255) / 31)],
   /* as the FM-1 shows it: each colour through RGB565 */
@@ -4499,10 +4718,10 @@ const THEME = {
   },
 };
 /* the FM-1's MIDI ports. Every FM-1 firmware has the same USB IDs, so Windows and macOS often keep the port name of the
- * first firmware they saw ("X0X FM-1", "USB-MIDI"…): the names the installer accepts (fm1ota.js FM1_PORT, the same
+ * first firmware they saw ("X0X FM-1", "USB-MIDI"…): the names the installer accepts (fm1ota.js PORT_RE, the same
  * list), as in/out pairs of one name, "Felucca" / "SLOOP" first, then FM-1, then the generic names. connect() keeps the
  * first pair that answers INFO, so a generic name of other gear is tried and left */
-const FM1_PORT = /fm-1|felucca|sloop|clipper|ota|composite|sinco|usb-midi/i;
+const FM1_PORT = /fm-1|smk|elite|mke-p37|starry|felucca|sloop|clipper|melodee|fomni|x0x|makkuro|maku|rainbow|snoop|vector|vox|ota|composite|sinco|usb-midi/i;
 function fm1Ports(access) {
   const live = (p) => p.state !== "disconnected" && FM1_PORT.test(p.name || "");
   const ins = [...access.inputs.values()].filter(live), outs = [...access.outputs.values()].filter(live);
@@ -4742,7 +4961,7 @@ const TEXT = {
     putDone: "本体に書き込みました: スロット ", storedSlot: "本体に保存しました: スロット ", erasedSlot: "消去しました: スロット ",
     loadedUser: "読み込みました: ", reloaded: "本体で音色が変わったので読み直しました", readingBank: "スロットを読み込み中",
     badEngine: "このファームウェアにないエンジンです: ", flashFail: "書き込みに失敗しました（rc {rc}）",
-    installer: "SLOOP インストーラー",
+    installer: "VIDEODROME インストーラー",
     offline: "エディタをダウンロード（パソコンでオフライン用：Chrome / Edge で開く）",
     install: "アプリとしてインストール（オフラインで使える・Android も）",
     tabSeq: "シーケンサー", tabTracks: "トラック", tabSettings: "設定",
@@ -4849,6 +5068,19 @@ const TEXT = {
     smpFull: "1 スロット 16 ファイルまで",
     chopSendBelow: "送信は下の 3 で。",
     /* SLOOP 2.5: DRUM SYNTH */
+    stockTitle: "M-Vave のファームウェアに戻る準備",
+    stockHelp: "サンプルスロット USR1 / USR2 は M-Vave ファームウェアの鍵盤・ノブ・フェーダーの設定と同じ場所を使います。ここを押すと（またはサンプルを初めて保存したとき）その設定の目印を消し、M-Vave ファームウェアに戻したときに工場出荷時のマッピングが作り直されます（MIDI Suite で作ったプリセットは消えます）。",
+    stockBtn: "M-Vave に戻る準備をする", stockDone: "準備しました: M-Vave ファームウェアは工場出荷時のマッピングで起動します",
+    stockNone: "準備は済んでいます（目印はありません）", stockBusy: "ソングを止めてから",
+    tabDaw: "DAW マップ", dawTitle: "DAW モード（SMK-37）",
+    dawHelp: "DAW モードでは鍵盤が MIDI コントローラーになります（本体: < と > を同時に押す、または HOME メニュー > MIDI > MODE）。ここでノブ・フェーダー・パッド・ボタン・ホイールが送る CC / ノート / MMC とチャンネルを決め、「本体に送る」で USER マップとして使います（本体が静かなときにフラッシュに保存）。MAIN = 本体の CHANNEL。",
+    dawSend: "本体に送る", dawRead: "本体から読む", dawDefault: "DEFAULT に戻す", dawSave: "ファイルに保存", dawOpen: "ファイルを開く",
+    dawMode: "モード", dawCh: "チャンネル", dawLocal: "LOCAL", dawMap: "CC マップ", dawKnobs: "ノブ",
+    dawCtl: "コントロール", dawType: "種類", dawNum: "番号", dawChan: "チャンネル",
+    dawSent: "本体に送りました（USER マップ）", dawUnsent: "未送信の変更があります", dawChanged: "DEFAULT から {n} 件変更",
+    dawFileBad: "DAW マップのファイルではありません", dawOpened: "読み込みました（「本体に送る」で反映）",
+    dawknobs: "ノブ（K1〜K8、バンク A / B）", dawfaders: "フェーダー（バンク A / B）", dawpads: "パッド（PAD 1〜8 が上の列、バンク A / B）",
+    dawbuttons: "ボタン", dawwheels: "ホイール",
     tabDrumSynth: "ドラムシンセ", dsTitle: "ドラムシンセ",
     dsHelp: "自分のシンセドラムキット SYN1〜SYN4（ドラムトラックの KIT の最後）。音を選び、値を変えると FM-1 ですぐ鳴ります。「FM-1 に保存」でフラッシュに残ります（ソングを止めて）。値をダブルクリック: 元のキットの値に戻す。",
     dsOld: "この FM-1 のファームウェアにはドラムシンセがありません（SLOOP 2.5 以降）。",
@@ -4905,6 +5137,11 @@ const TEXT = {
     songUp: "上へ", songDown: "下へ", songDel: "削除",
     songOld: "この FM-1 のファームウェアではソングを読めません（SLOOP 2.5 以降）。",
     songBad: "このソングは送れません（16 項目、1〜64 小節まで）", songRefused: "ソングを止めてから送ってください",
+    chainPads: "つなぐ:", chainClear: "空にする", chainSet: "このチェーンにする", chainTpl: "曲の形から…",
+    chainHelp: "セクションを押すと最後に足されます。ブロックを押すと消えます。文字でも書けます: A4 B8 C8x2 は A を 4 小節、B を 8 小節、C を 8 小節 2 回。",
+    chainBad: "読めないところ: ", chainLong: "長すぎます（16 項目まで）: ", chainInfo: "{bars} 小節、{bpm} BPM で {time}",
+    tplLoop: "ループ A B C D", tplVerse: "ヴァース / コーラス", tplBuild: "ビルドアップ", tplMinimal: "ミニマル", tplDrone: "ドローン",
+    tplScore: "映画のスコア", tplBroadcast: "放送（オープニングからエンディングまで）",
     songSent: "ソングを FM-1 に送りました",
   },
   en: {
@@ -5079,7 +5316,7 @@ const TEXT = {
     putDone: "Written to the device: slot ", storedSlot: "Stored on the device: slot ", erasedSlot: "Erased slot ",
     loadedUser: "Loaded ", reloaded: "The sound changed on the device: read again", readingBank: "Reading the slots",
     badEngine: "This firmware has no such engine: ", flashFail: "Write failed (rc {rc})",
-    installer: "SLOOP installer",
+    installer: "VIDEODROME installer",
     offline: "Download the editor (offline on a computer: open it in Chrome or Edge)",
     install: "Install the app (works offline, Android too)",
     tabSeq: "Sequencer", tabTracks: "Tracks", tabSettings: "Settings",
@@ -5186,6 +5423,19 @@ const TEXT = {
     smpFull: "A slot takes 16 files at most",
     chopSendBelow: "Sending: step 3 below.",
     /* SLOOP 2.5: DRUM SYNTH */
+    stockTitle: "Going back to the M-Vave firmware",
+    stockHelp: "The sample slots USR1 / USR2 use the place where the M-Vave firmware keeps its key, knob and fader mapping. This button (as the first sample stored there) erases that mapping's marker, so the M-Vave firmware rebuilds its factory mapping when you go back to it (presets made with MIDI Suite are gone then).",
+    stockBtn: "Prepare the return to M-Vave", stockDone: "Done: the M-Vave firmware will start with its factory mapping",
+    stockNone: "Already prepared (no marker)", stockBusy: "Stop the song first",
+    tabDaw: "DAW map", dawTitle: "DAW mode (SMK-37)",
+    dawHelp: "In DAW mode the keyboard is a MIDI controller (on the keyboard: < and > together, or HOME menu > MIDI > MODE). Set here what the knobs, faders, pads, buttons and wheels send (CC, note or MMC, and the channel); Send to the keyboard makes it the USER map (kept in flash once the keyboard is quiet). MAIN = the keyboard's CHANNEL.",
+    dawSend: "Send to the keyboard", dawRead: "Read from the keyboard", dawDefault: "Back to DEFAULT", dawSave: "Save to a file", dawOpen: "Open a file",
+    dawMode: "mode", dawCh: "channel", dawLocal: "local", dawMap: "CC map", dawKnobs: "knobs",
+    dawCtl: "control", dawType: "type", dawNum: "number", dawChan: "channel",
+    dawSent: "Sent (the USER map)", dawUnsent: "changes not sent yet", dawChanged: "{n} changed from DEFAULT",
+    dawFileBad: "Not a DAW map file", dawOpened: "Opened (Send to the keyboard to use it)",
+    dawknobs: "Knobs (K1 to K8, bank A / B)", dawfaders: "Faders (bank A / B)", dawpads: "Pads (PAD 1 to 8 the top row, bank A / B)",
+    dawbuttons: "Buttons", dawwheels: "Wheels",
     tabDrumSynth: "Drum synth", dsTitle: "Drum synth",
     dsHelp: "Your own synthesised drum kits, SYN1 to SYN4 (the last kits of the drum track's KIT). Pick a sound, change its values: the FM-1 plays it at once. Store on the FM-1 keeps them in flash (stop the song first). Double-click a value: back to the kit it started from.",
     dsOld: "This FM-1's firmware has no drum synth (SLOOP 2.5 or later).",
@@ -5242,6 +5492,11 @@ const TEXT = {
     songUp: "Up", songDown: "Down", songDel: "Remove",
     songOld: "This FM-1's firmware cannot share its song (SLOOP 2.5 or later).",
     songBad: "This song cannot be sent (16 entries, 1–64 bars each)", songRefused: "Stop the song first, then send",
+    chainPads: "Chain:", chainClear: "clear", chainSet: "Use this chain", chainTpl: "Start from a song shape…",
+    chainHelp: "Tap a section to add it at the end; tap a block to take it out. Or type it: A4 B8 C8x2 is A for 4 bars, B for 8, C for 8 twice.",
+    chainBad: "Cannot read: ", chainLong: "Too long (16 entries at most): ", chainInfo: "{bars} bars, {time} at {bpm} BPM",
+    tplLoop: "Loop A B C D", tplVerse: "Verse / chorus", tplBuild: "Build-up", tplMinimal: "Minimal", tplDrone: "Drone",
+    tplScore: "Film score", tplBroadcast: "Broadcast (sign-on to sign-off)",
     songSent: "Song sent to the FM-1",
   },
 };
@@ -5271,10 +5526,19 @@ function applyLang() {
   renderPreview();
 }
 $("lang").addEventListener("click", () => { lang = lang === "ja" ? "en" : "ja"; applyLang(); });
+/* VIDEODROME: the CRT raster over the page, on unless switched off (remembered in this browser) */
+const CRT_KEY = "videodrome-crt";
+function setCrt(on) {
+  document.body.classList.toggle("crt", on);
+  $("crt").setAttribute("aria-pressed", on ? "true" : "false");
+  try { localStorage.setItem(CRT_KEY, on ? "1" : "0"); } catch (e) { /* no storage */ }
+}
+{ let on = true; try { on = localStorage.getItem(CRT_KEY) !== "0"; } catch (e) { /* no storage */ } setCrt(on); }
+$("crt").addEventListener("click", () => setCrt(!document.body.classList.contains("crt")));
 
 /* ---------------------------------------------------------------- tabs --- */
 /* one panel at a time; the last one is remembered (localStorage) and in the URL hash (#sound ...) */
-const TABS = ["live", "sound", "sequencer", "tracks", "song", "library", "samples", "kits", "drumsynth", "projects", "settings", "theme"];
+const TABS = ["live", "sound", "sequencer", "tracks", "song", "library", "samples", "kits", "drumsynth", "projects", "settings", "theme", "daw"];
 const TAB_KEY = "felucca-editor-tab";
 const TRACK_TABS = new Set(["sound", "sequencer", "tracks"]);
 let tab = (() => {
@@ -5296,13 +5560,15 @@ function showTab(name) {
 function renderPanels() {
   /* the Tracks tab only with a four-track firmware */
   const tracksOk = !dev || hasTracks() || !dev.info;
-  const want = tab === "tracks" && dev && dev.info && !hasTracks() ? "sound" : tab;
+  const want = (tab === "tracks" && dev && dev.info && !hasTracks()) || (tab === "daw" && dev && dev.dump && !dev.daw) ? "sound" : tab;
   for (const b of $("tabs").querySelectorAll("button[data-tab]")) {
     const on = b.dataset.tab === want;
     b.setAttribute("aria-selected", on ? "true" : "false");
     b.tabIndex = on ? 0 : -1;
     if (b.dataset.tab === "tracks") b.hidden = !tracksOk;
+    if (b.dataset.tab === "daw") b.hidden = !(dev && dev.daw);   /* (SMK-37: a device that answers DAW_GET) */
   }
+  $("stockcard").hidden = !(dev && dev.daw);           /* (SMK-37: the way back to the M-Vave firmware) */
   const ready = !!dev && !!dev.dump;
   let hint = "";
   for (const p of document.querySelectorAll(".panel")) {
@@ -5318,6 +5584,7 @@ function renderPanels() {
   const nb = $("tabs").querySelector(`button[data-tab="${want}"]`);   /* the page's title: its name in the side bar */
   $("pagetitle").textContent = nb ? t(nb.dataset.t) : "";
   if (want === "kits") renderKits();
+  if (want === "daw" && ready) renderDaw();
   if (want === "drumsynth" && ready) {                 /* (2.5) the SYN kits, read once per connection */
     if (DS.dev !== dev) { Object.assign(DS, { dev, kit: null, list: null, k: 0, lane: 0 }); if (dsOk()) op(() => dsLoad(0)); renderDs(); } else renderDs();
   }
@@ -5951,7 +6218,7 @@ async function connect() {
   sayK("connecting");
   try {
     if (!access) {
-      if (MOCK) { mock = makeMockDevice({ auto: false, legacy: QS.get("legacy") === "1", onChange: previewChanged }); access = mock.access; }
+      if (MOCK) { mock = makeMockDevice({ auto: false, legacy: QS.get("legacy") === "1", daw: QS.get("smk") === "1", onChange: previewChanged }); access = mock.access; }
       else {
         try { access = await navigator.requestMIDIAccess({ sysex: true }); }
         catch (e) { sayK("denied"); return; }
@@ -6073,6 +6340,11 @@ async function load(d) {
       catch (e) { if (e.message === "closed") throw e; }
     }
     fm6Names(d);
+    d.daw = null;                                     /* SMK-37: DAW mode (no reply: another device) */
+    try { d.daw = parse[CMD.DAW_GET](await d.link.request(req.dawGet(1), { timeout: 300, retries: 0, quiet: true })); }
+    catch (e) { if (e.message === "closed") throw e; }
+    DW.map = d.daw ? d.daw.map.map((x) => ({ ...x })) : null;
+    DW.dirty = false;
     await libAdopt(d);
     if (d.info.ntrk) d.sel = parse[CMD.TRACK](await d.link.request(req.track())).sel;   /* v3: the selected track */
     d.dump = await getDump();
@@ -7361,6 +7633,96 @@ $("dsfile").addEventListener("change", async (e) => {
   });
 });
 
+/* ---- SMK-37: the DAW MAP page (DAW mode's settings and USER map, editor_daw.c) ---- */
+const DW = { map: null, dirty: false };
+function dawSettings() { const d = dev.daw; return { on: d.on, ch: d.ch, local: d.local, user: d.user, rel: d.rel }; }
+async function dawPut(st, map = null) {
+  const r = parse[CMD.DAW_PUT](await rq(req.dawPut(st, map), { timeout: 1000, retries: 0 }));
+  dev.daw = r;
+  if (map) { DW.map = r.map.map((x) => ({ ...x })); DW.dirty = false; }
+  renderDaw();
+  return r;
+}
+function dawSel(id, opts, v, on) {
+  const sel = el("select", id ? { id } : {});
+  sel.replaceChildren(...opts.map(([val, txt]) => el("option", { value: String(val), text: txt })));
+  sel.value = String(v);
+  sel.addEventListener("change", () => on(+sel.value));
+  return sel;
+}
+function renderDaw() {
+  if (!dev || !dev.daw || !DW.map) return;
+  const d = dev.daw, set = $("dawset");
+  const lab = (k, x) => el("label", {}, el("span", { class: "dim", text: t(k) + " " }), x);
+  const ch16 = Array.from({ length: 16 }, (_, i) => [i + 1, String(i + 1)]);
+  const put = (k) => (v) => op(() => dawPut({ ...dawSettings(), [k]: v }));
+  set.replaceChildren(
+    lab("dawMode", dawSel("dawon", [[0, "SYNTH"], [1, "DAW"]], d.on, put("on"))),
+    lab("dawCh", dawSel("dawch", ch16, d.ch, put("ch"))),
+    lab("dawLocal", dawSel("dawlocal", [[0, "OFF"], [1, "ON"]], d.local, put("local"))),
+    lab("dawMap", dawSel("dawuser", [[0, "DEFAULT"], [1, "USER"]], d.user, put("user"))),
+    lab("dawKnobs", dawSel("dawrel", [[0, "ABSOLUTE"], [1, "RELATIVE"]], d.rel, put("rel"))));
+  $("dawstate").textContent = (DW.dirty ? t("dawUnsent") + " · " : "") + t("dawChanged").replace("{n}", DAW.changed(DW.map));
+  const box = $("dawmap"), groups = new Map();
+  box.replaceChildren();
+  for (let i = 0; i < DAW.N; i++) {
+    const k = DAW.KIND[DAW.kind(i)];
+    if (!groups.has(k)) {
+      const tb = el("table", {}, el("tr", {}, el("th", { text: t("dawCtl") }), el("th", { text: t("dawType") }),
+        el("th", { text: t("dawNum") }), el("th", { text: t("dawChan") }), el("th", {})));
+      groups.set(k, tb);
+      box.append(el("div", {}, el("h3", { text: t("daw" + k) }), tb));
+    }
+    const e = DW.map[i], row = el("tr", { class: DAW.same(e, DAW.def(i)) ? "" : "chg" });
+    const changed = () => { DW.dirty = true; renderDaw(); };
+    const ty = dawSel("", DAW.TYPES[DAW.kind(i)].map((x) => [x, DAW.TYPE_NAMES[x]]), e.type, (v) => { DAW.setType(i, e, v); changed(); });
+    let num;
+    if (e.type === DAW.T.MMC) num = dawSel("", DAW.MMC.slice(1).map((x, j) => [j + 1, x]), e.num, (v) => { e.num = v; changed(); });
+    else if (e.type === DAW.T.OFF || e.type === DAW.T.BEND) num = el("span", { class: "dim", text: "-" });
+    else {
+      num = el("input", { type: "number", min: "0", max: "127", value: String(e.num) });
+      num.addEventListener("change", () => { e.num = Math.max(0, Math.min(127, num.value | 0)); changed(); });
+    }
+    const chs = e.type === DAW.T.OFF ? el("span", { class: "dim", text: "-" })
+      : dawSel("", [[0, `MAIN (${d.ch})`], ...ch16], e.ch, (v) => { e.ch = v; changed(); });
+    row.append(el("td", { text: DAW.label(i) }), el("td", {}, ty), el("td", {}, num), el("td", {}, chs),
+      el("td", { class: "dim", text: e.type === DAW.T.NOTE ? DAW.noteName(e.num) : "" }));
+    groups.get(k).append(row);
+  }
+}
+$("stockrel").addEventListener("click", () => op(async () => {
+  const r = parse[CMD.STOCK_RELEASE](await rq(req.stockRelease(), { timeout: 1500, retries: 0 }));
+  sayK(r.rc === 0 ? "stockDone" : r.rc === 3 ? "stockBusy" : "stockNone");
+}));
+$("dawsend").addEventListener("click", () => op(async () => {
+  if (!DW.map) return;
+  await dawPut({ ...dawSettings(), user: 1 }, DW.map);
+  sayK("dawSent");
+}));
+$("dawread").addEventListener("click", () => op(async () => {
+  dev.daw = parse[CMD.DAW_GET](await rq(req.dawGet(1)));
+  DW.map = dev.daw.map.map((x) => ({ ...x }));
+  DW.dirty = false;
+  renderDaw();
+}));
+$("dawdef").addEventListener("click", () => { if (!DW.map) return; DW.map = DAW.defaults(); DW.dirty = true; renderDaw(); });
+$("dawsave").addEventListener("click", () => {
+  if (!dev || !dev.daw || !DW.map) return;
+  downloadBytes("smk37-daw-map.json", new TextEncoder().encode(JSON.stringify(DAW.toFile(dev.daw, DW.map), null, 1)));
+});
+$("dawopen").addEventListener("click", () => $("dawfile").click());
+$("dawfile").addEventListener("change", async (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!f || !DW.map) return;
+  let o;
+  try { o = DAW.fromFile(JSON.parse(await f.text())); } catch (err) { sayK("dawFileBad"); return; }
+  DW.map = o.map;
+  DW.dirty = true;
+  renderDaw();
+  sayK("dawOpened");
+});
+
 /* ---- SLOOP 2.5: the Song page: the order of the sections A..D (the device's SONG screen, from the browser) ---- */
 const SG = { rows: null, loop: false, bytes: null, err: "", dirty: false };
 async function readSong() {
@@ -7430,7 +7792,52 @@ function renderSong() {
   $("songsend").classList.toggle("pri", SG.dirty);
   for (const b of $("songloop").children) b.setAttribute("aria-pressed", (b.dataset.v === "1") === SG.loop ? "true" : "false");
   $("songempty").hidden = !SG.rows.some((r) => dev.slotUsed[r.scene] === false);
+  renderChain();
 }
+/* VIDEODROME: the chain builder's pads, timeline and text, from SG.rows */
+function chainApply(rows) {
+  const norm = ARR.group(ARR.expand(rows));
+  if (norm.reduce((a, r) => a + r.times, 0) > ARR.STEPS) { $("chainerr").hidden = false; $("chainerr").textContent = t("chainLong") + CHAIN.format(norm); return; }
+  songEdit(() => { SG.rows = norm; });
+}
+function renderChain() {
+  if (!SG.rows) return;
+  const pads = $("chainpads");
+  if (!pads.children.length) {
+    pads.append(...[0, 1, 2, 3].map((sc) => el("button", { type: "button", text: CHAIN.LET[sc],
+      onclick: () => chainApply([...SG.rows, { scene: sc, bars: +$("chainbars").value || 4, times: 1 }]) })));
+    $("chainbars").append(...[1, 2, 4, 8, 16, 32, 64].map((b) => el("option", { value: b, text: String(b) })));
+    $("chainbars").value = "4";
+    $("chaintpl").append(...CHAIN.TEMPLATES.map(([k, txt]) => el("option", { value: txt, text: `${t(k)}: ${txt}` })));
+  }
+  [...pads.children].forEach((b, sc) => b.classList.toggle("empty", dev.slotUsed[sc] === false));
+  const total = CHAIN.bars(SG.rows);
+  $("chainline").replaceChildren(...SG.rows.map((r, k) => el("span", { class: `blk s${r.scene}`, title: t("songDel"),
+    style: `width:${Math.max(22, Math.round(r.bars * Math.max(1, r.times) * 520 / Math.max(64, total)))}px`,
+    onclick: () => songEdit(() => { if (r.times > 1) r.times--; else SG.rows.splice(k, 1); }) },
+    CHAIN.LET[r.scene] + r.bars, r.times > 1 ? el("small", { text: "x" + r.times }) : "")));
+  if (document.activeElement !== $("chaintext")) $("chaintext").value = CHAIN.format(SG.rows);
+  $("chaininfo").textContent = t("chainInfo").replace("{bars}", total).replace("{bpm}", gBpm()).replace("{time}", CHAIN.time(SG.rows, gBpm()));
+}
+function chainFromText(txt) {
+  const r = CHAIN.parse(txt);
+  $("chainerr").hidden = !r.bad.length && r.count <= ARR.STEPS;
+  if (r.bad.length) { $("chainerr").textContent = t("chainBad") + r.bad.join(" "); return null; }
+  if (r.count > ARR.STEPS) { $("chainerr").textContent = t("chainLong") + CHAIN.format(r.rows); return null; }
+  return r.rows;
+}
+$("chaintext").addEventListener("input", () => chainFromText($("chaintext").value));
+$("chaintext").addEventListener("keydown", (e) => { if (e.key === "Enter") $("chainset").click(); });
+$("chainset").addEventListener("click", () => { const rows = chainFromText($("chaintext").value); if (rows && rows.length) chainApply(rows); });
+$("chaintpl").addEventListener("change", () => {
+  const v = $("chaintpl").value;
+  $("chaintpl").value = "";
+  if (!v || !SG.rows) return;
+  $("chaintext").value = v;
+  const rows = chainFromText(v);
+  if (rows) chainApply(rows);
+});
+$("chainclear").addEventListener("click", () => songEdit(() => { SG.rows = []; }));
 $("songadd").addEventListener("click", () => songEdit(() => {
   const last = SG.rows[SG.rows.length - 1];
   SG.rows.push({ scene: last ? (last.scene + 1) % 4 : 0, bars: last ? last.bars : 4, times: 1 });

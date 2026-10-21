@@ -87,7 +87,7 @@ static void vds_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         ph2 += inc2;
         x = (mulq15(o1, l1v) + mulq15(o2, l2v)) >> 1;
         x = vd_k35_lp(&CL, &KL, vd_k35_hp(&CH, &KH, x));
-        out[i] += voice_amp(vd_dc(&s->f[11], x + (x >> 1)), m, i);
+        out[i] += VD_OUT(vd_dc(&s->f[11], x + (x >> 1)), m, i, 40);
     }
     s->ph[0] = ph1;
     s->ph[1] = ph2;

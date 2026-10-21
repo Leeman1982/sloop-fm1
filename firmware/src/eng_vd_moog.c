@@ -115,7 +115,7 @@ static void vdm_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
         ph2 += inc2;
         ph3 += inc3;
         y = vd_cas4(&Z, &L, (x * drive) >> 12, VDZ_LADDER, &y2);
-        out[i] += voice_amp(vd_dc(&s->f[11], y + (y >> 1)), m, i);
+        out[i] += VD_OUT(vd_dc(&s->f[11], y + (y >> 1)), m, i, 40);
     }
     s->ph[0] = ph1;
     s->ph[1] = ph2;

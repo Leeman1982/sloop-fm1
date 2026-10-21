@@ -98,7 +98,7 @@ const TEXT = {
   ja: {
     intro: "FM-1 を USB で接続してください。（Chrome か Edge で使えます）",
     warn: "書き込み中は USB を抜かないでください。",
-    install: "インストール", other: "English",
+    install: "インストール", langOther: "English",
     editor: "エディタ（インストール後、パソコンから音色やシーケンスを編集）",
     edOffline: "エディタをダウンロード（パソコンでインターネットなしで使う：ファイルを Chrome / Edge で開く）",
     appInstall: "アプリとしてインストール（エディタとインストーラーがオフラインで使える・Android も）",
@@ -135,7 +135,7 @@ const TEXT = {
   en: {
     intro: "Connect the FM-1 by USB. (Works in Chrome or Edge.)",
     warn: "Do not unplug the USB cable while writing.",
-    install: "Install", other: "日本語",
+    install: "Install", langOther: "日本語",
     editor: "Editor (after installing: edit sounds and sequences from the computer)",
     edOffline: "Download the editor to use it without internet on a computer (open the file in Chrome or Edge)",
     appInstall: "Install the app (the editor and the installer offline, Android too)",
@@ -176,7 +176,7 @@ let lastKey = null, lastArg = "";
 function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-t]").forEach((e) => { e.textContent = t(e.dataset.t); });
-  $("lang").textContent = t("other");
+  $("lang").textContent = t("langOther");   /* ("other" is the SMK firmware refusal: fm1ota.js fail("other")) */
   if (lastKey) $("status").textContent = t(lastKey) + lastArg;
 }
 $("lang").addEventListener("click", () => { lang = lang === "ja" ? "en" : "ja"; applyLang(); });

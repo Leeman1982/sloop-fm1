@@ -834,8 +834,10 @@ int main(int argc, char **argv)
     for (e = 0; e < NENGINES; e++)
         for (pi = 0; pi < ENGINES[e]->npresets; pi++) {
             job_t *j;
+            char en[24];
             slug(s, ENGINES[e]->presets[pi].name, sizeof s);
-            snprintf(name, sizeof name, "preset/%s/%02u_%s", ENGINES[e]->name, pi, s);
+            slug(en, ENGINES[e]->name, sizeof en);              /* (VIDEODROME: "MODEL D": the files split on spaces) */
+            snprintf(name, sizeof name, "preset/%s/%02u_%s", en, pi, s);
             j = add(J_PRESET, name);
             j->e = (uint8_t)e;
             j->pi = (uint8_t)pi;
@@ -890,8 +892,10 @@ int main(int argc, char **argv)
     for (e = 0; e < NENGINES; e++)
         for (pi = 0; pi < ENGINES[e]->npresets; pi++) {
             job_t *j;
+            char en[24];
             slug(s, ENGINES[e]->presets[pi].name, sizeof s);
-            snprintf(name, sizeof name, "cpu/%s/%02u_%s", ENGINES[e]->name, pi, s);
+            slug(en, ENGINES[e]->name, sizeof en);
+            snprintf(name, sizeof name, "cpu/%s/%02u_%s", en, pi, s);
             j = add(J_CPU, name);
             memset(cpu_parts[ncpu], 0, sizeof cpu_parts[ncpu]);
             cpu_parts[ncpu][0][0] = (uint8_t)e;

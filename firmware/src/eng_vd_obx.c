@@ -108,7 +108,7 @@ static void vdo_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const v
             ph2 = (n1 >> 8) * ratio;
         ph1 = n1;
         x = (a + b) >> 2;
-        out[i] += voice_amp(vd_dc(&s->f[11], vdo_sem(&C, x, &ic1, &ic2) << 1), m, i);
+        out[i] += VD_OUT(vd_dc(&s->f[11], vdo_sem(&C, x, &ic1, &ic2) << 1), m, i, 40);
     }
     s->ph[0] = ph1;
     s->ph[1] = ph2;

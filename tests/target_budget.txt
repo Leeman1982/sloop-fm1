@@ -22,3 +22,10 @@ grain_block 138
 slicer_track 825
 drums_mix 6153
 fm1_alnk0_irq 174
+# VIDEODROME (2.8 V1): the six component models' render loops (vd_cas4, the KORG35 and the SVFs inlined)
+vdm_render 1151
+vdp_render 813
+vdj_render 638
+vdo_render 619
+vds_render 729
+vdc_render 803
