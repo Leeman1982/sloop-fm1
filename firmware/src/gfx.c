@@ -85,14 +85,10 @@ static theme_t theme;                            /* the theme there is (theme_va
 static uint8_t theme_valid, theme_on;
 /* the tracks' colours: full, two thirds, one third. VIDEODROME: the colour bars' (SMPTE: cyan, magenta, yellow) for
  * the three synth tracks, the title card's orange for the drums */
-#define VD_T1 RGB(0, 204, 224)
-#define VD_T2 RGB(224, 48, 200)
-#define VD_T3 RGB(232, 212, 0)
-#define VD_T4 RGB(255, 104, 24)
-static const uint16_t TE_COL_DEF[4] = {VD_T1, VD_T2, VD_T3, VD_T4};
+static const uint16_t TE_COL_DEF[4] = {RGB(0, 204, 224), RGB(224, 48, 200), RGB(232, 212, 0), RGB(255, 104, 24)};
 static const uint16_t TE_MID_DEF[4] = {RGB(0, 136, 150), RGB(150, 32, 134), RGB(154, 141, 0), RGB(170, 70, 16)};
 static const uint16_t TE_DIM_DEF[4] = {RGB(0, 68, 74), RGB(74, 16, 66), RGB(78, 70, 0), RGB(86, 34, 8)};
-static uint16_t TE_COL[4] = {VD_T1, VD_T2, VD_T3, VD_T4};
+static uint16_t TE_COL[4] = {RGB(0, 204, 224), RGB(224, 48, 200), RGB(232, 212, 0), RGB(255, 104, 24)};
 static uint16_t TE_MID[4] = {RGB(0, 136, 150), RGB(150, 32, 134), RGB(154, 141, 0), RGB(170, 70, 16)};
 static uint16_t TE_DIM[4] = {RGB(0, 68, 74), RGB(74, 16, 66), RGB(78, 70, 0), RGB(86, 34, 8)};
 static uint8_t vd_raster;                        /* VIDEODROME: the CRT raster on (palette CIVIC 83; palette_set) */

@@ -122,8 +122,8 @@ def main(pkg, version, out):
         if html.count(mark) != 1:
             raise SystemExit(f"index_pkg.html must contain {mark} once; update make_site.py")
     html = html.replace("/*LIB*/", lib).replace("/*META*/", meta)
-    logo = HERE.parent / "assets" / "logo" / "sloop-logo.svg"     # the SLOOP logo, inline
-    html = html.replace("<!--LOGO-->", logo.read_text(encoding="utf-8") if logo.exists() else "<b>SLOOP</b>")
+    # VIDEODROME: the wordmark as text (index_pkg.html .vdmark: the title card's orange, misconverged), not SLOOP's sail
+    html = html.replace("<!--LOGO-->", '<span class="vdmark">VIDEODROME</span>')
     inst, ed, fw = out / "webapp" / "installer", out / "webapp" / "editor", out / "firmware"
     for d in (inst, ed, fw):
         d.mkdir(parents=True, exist_ok=True)

@@ -5,11 +5,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SLOOP installer</title>
+<title>VIDEODROME installer</title>
 <!--PWA--><link rel="manifest" href="../sloop.webmanifest"><meta name="theme-color" content="#000000"><link rel="icon" href="../icon-192.png"><!--/PWA-->
 <style>
   :root { --bg: #000; --fg: #f2f2f2; --dim: #8a8a92; --tile: #16161a; --line: #2a2a30;
-          --blue: #287cff; --green: #1ecc70; --yellow: #ffc618; --orange: #ff621a; --red: #ff2c34; }
+          --blue: #00cce0; --green: #e030c8; --yellow: #e8d400; --orange: #ff6818; --red: #ff2c34;
+          --vd: #ff6818; --vdr: #c81428; --vdc: #0096aa; }   /* VIDEODROME: the colour bars, the title card's orange */
   :root[data-theme="light"] { --bg: #f4f4f2; --fg: #111; --dim: #666; --tile: #e6e6e2; --line: #d0d0cc; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
@@ -17,6 +18,8 @@
   main { max-width: 560px; margin: 0 auto; padding: 32px 16px 48px; }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .logo svg { display: block; width: 220px; height: auto; }
+  .vdmark { color: var(--vd); font: 700 34px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 2px;
+            text-shadow: -2px 0 var(--vdr), 2px 0 var(--vdc); }
   .logo rect:first-child { fill: transparent; }
   .lang { font-size: 12px; color: var(--dim); cursor: pointer; text-decoration: underline; background: none;
           border: 0; padding: 0; text-transform: lowercase; }
@@ -58,10 +61,10 @@
   <div class="strip"><i></i><i></i><i></i><i></i></div>
   <!--STUDIO_GUIDE-->
   <!--BANNER-->
-  <h1>Firmware for the M-VAVE FM-1</h1>
-  <p class="lead">A groovebox you play live: four tracks — three synths and a drum machine — 12 synth engines (with six-operator FM and DX7 patches), 153 sounds, 37 drum kits from 808 to techno, amapiano and ambient, your own samples and drum kits, 27 punch-in effects. House, techno, hip-hop, drum &amp; bass, synthwave, lo-fi, ambient: make what you want. No factory patterns, nothing to load: everything you hear, you play.</p>
+  <h1>Firmware for the M-VAVE FM-1 and SMK-37</h1>
+  <p class="lead">CIVIC-TV, channel 83. Six classic synthesizers modelled a stage at a time, from the circuits: Minimoog Model D, Prophet-5, Jupiter-8, OB-X, MS-20 and CS-80, on SLOOP's live groovebox: four tracks — three synths and a drum machine — its twelve engines too, 249 sounds, 37 drum kits, your own samples, 27 punch-in effects, songs chained from four sections.</p>
   <div class="tiles">
-    <div class="tile" style="--c: var(--blue)"><b>153</b><span>sounds, 12 engines, your samples</span></div>
+    <div class="tile" style="--c: var(--blue)"><b>6</b><span>circuit models: ladder, CEM3320, IR3109, SEM, KORG35, IG00156</span></div>
     <div class="tile" style="--c: var(--green)"><b>37</b><span>drum kits, 909 to afro, + your own</span></div>
     <div class="tile" style="--c: var(--yellow)"><b>27</b><span>punch-in fx: hold fx + key</span></div>
     <div class="tile" style="--c: var(--orange)"><b>rec</b><span>no click: the loop follows you</span></div>
@@ -82,10 +85,10 @@
     <a href="https://github.com/kurogedelic/FM-1-transporter" target="_blank" rel="noopener">FM-1-transporter</a></p>
   <p class="small" data-t="back"></p>
   <p class="small"><a href="https://www.m-vave.com/download" target="_blank" rel="noopener">www.m-vave.com/download</a></p>
-  <p class="small">SLOOP is based on Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>.
+  <p class="small">VIDEODROME: the models from xtro, on SLOOP by isod89 (SMK-37 board layer by genkigenki), based on Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>.
     Hold OCT− alone while switching on for USB rescue.<br>
     Font: Terminus (Dimitar Toshkov Zhekov, SIL OFL 1.1). Samples: Versilian Studios VSCO-2 Community Edition and VCSL (CC0 1.0), and the Hügelton Sample Pack (© Hügelton Instruments, not CC0).<br>
-    M-VAVE and FM-1 are trademarks of their respective owners; SLOOP is not affiliated with them.<br>
+    M-VAVE, FM-1 and SMK-37 are trademarks of their respective owners, as are the names of the instruments modelled; VIDEODROME is not affiliated with any of them.<br>
     <span data-t="license"></span> <a href="https://github.com/hugelton/Felucca" target="_blank" rel="noopener">github.com/hugelton/Felucca</a></p>
 </main>
 <script type="module">
@@ -227,7 +230,7 @@ window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault
       if (h !== meta.sha256) { sayK("badpkg"); log(`sha256 ${h}, expected ${meta.sha256}`); return; }
     }
     image = logicalImage(pkg);
-    say(`SLOOP ${meta.version}`);
+    say(`VIDEODROME ${meta.version}`);
     lockAll(writing);
   } catch (e) { sayK("loadfail", e.message); }
 })();
