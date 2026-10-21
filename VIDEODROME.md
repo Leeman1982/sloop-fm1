@@ -107,7 +107,9 @@ from xtro's banks, some for the film:
 - **CS-80**: BLADE BRSS, TEARS RAIN, CS STRINGS, CS BRASS, YAMAHA PAD, SINE ORGAN, BELL, CS BASS, CS LEAD, HARPSICH,
   HUMAN VOX, RANNOCH, SIGNAL, TV STATIC, WARM BRASS, GLIDE LEAD
 
-SLOOP's 153 sounds follow them in the list.
+SLOOP's 153 sounds follow them in the list. **MIDI Program Change** follows the list too: programs 0–95 are the six
+models' sounds (by kind: basses, keys, organ, pads, leads, plucks, stabs, effects), 96 on SLOOP's in its order. Your
+favourites from SLOOP still name the same sounds.
 
 ## The look
 
