@@ -210,6 +210,13 @@ projects, presets, samples and settings. On the way back a track on one of the s
 merged here into SLOOP 2.8. Read [SMK37.md](SMK37.md) first: a full flash backup, the protected flash ranges, the way
 back to the M-Vave firmware.
 
+## The RP2350 build (the xtro board)
+
+The same synth, from the same sources, on [xtro](https://github.com/leeman1982/xtro)'s board: a Pico 2 (RP2350, 16 MB),
+a PCM5102A, a 128×64 SSD1309 OLED, an encoder and five buttons, two pots, DIN MIDI. It has an OLED UI in xtro's "84"
+style. See [rp2350/README.md](rp2350/README.md) for the wiring, the Arduino IDE settings, the controls, what did not
+come across (the keys' layers, USB MIDI and the editor) and the performance estimates. Untested on hardware.
+
 ## Build
 
 As SLOOP's ([BUILDING.md](BUILDING.md)): the JieLi toolchain, three files of the AC79 SDK, then

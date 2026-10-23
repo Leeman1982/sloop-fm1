@@ -1,0 +1,413 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
+/* Small-canvas renderer (no full framebuffer). Draw text/lines into
+ * an off-screen strip, then blit it in one DMA transfer. Pixels are stored
+ * byte-swapped (the panel takes RGB565 big-endian). */
+/* UI_SMALL: the screens' and the buttons' functions (panel.c, ui*.c, icons.c; never in the audio
+ * path) are compiled for size (clang minsize, as -Oz). 2.7: the drums' SOUND page and the favourites
+ * made the image overflow the flash (XIP); this gives it back with nothing taken out. */
+#ifndef UI_SMALL
+#if defined(__clang__)
+#define UI_SMALL __attribute__((minsize))
+#else
+#define UI_SMALL
+#endif
+#endif
+typedef struct {               /* proportional, see tools/gen_font.py */
+    uint8_t h;
+    uint8_t pad;               /* bitmap starts this many pixels left of the pen */
+    uint8_t first, last;
+    uint8_t sh;                /* 1: the bitmaps are another font's, drawn at 2x (L = S at 2x, no copy) */
+    const uint8_t *adv;        /* advance per glyph */
+    const uint8_t *bw;         /* bitmap width per glyph (starts FONT_PAD left of the pen) */
+    const uint16_t *off;       /* byte offset of each glyph */
+    const uint8_t *data;
+    uint8_t bits;              /* SLOOP 2.6: 1 = 1 bit a pixel (a pixel font: glyph rows one after the other, high
+                                * bit first, each glyph from a whole byte); 0 = 2 pixels a byte, alpha 0..15 */
+} felucca_font_t;
+#include "felucca_font.h"
+
+#ifndef CV_MAX                   /* (the RP2350 build, rp2350/Videodrome: an OLED, no canvas: its own, tiny) */
+#define CV_MAX (240u * 124u)      /* the graph strip is 240 x 124 */
+#endif
+static uint16_t cv_px[CV_MAX] __attribute__((section(".pool")));
+static uint32_t cv_w, cv_h;
+static int32_t cv_oy;            /* y offset for graph drawing */
+
+#define RGB(r, g, b) ((uint16_t)((((r) >> 3) << 11) | (((g) >> 2) << 5) | ((b) >> 3)))
+static uint16_t pal_bg;                  /* SLOOP 2.7: the background, black unless a theme says (palette_set) */
+#define C_BLACK pal_bg                   /* the background (and dark text on a light tile) */
+static uint16_t pal_hi = 0xFFFFu;        /* the accent: white unless a theme says (palette_set) */
+#define C_WHITE pal_hi               /* accent only: what is being touched / where we are */
+/* The screen is five steps of one colour, darkest to brightest, plus white.
+ * Palettes are picked in the HOME-hold menu (COLOR). */
+typedef struct {
+    const char *name;
+    uint16_t c[5];
+    uint16_t bg, hi;                     /* VIDEODROME: the background and the accent (SLOOP's: black, white) */
+} palette_t;
+#define PAL_STD 0u, 0xFFFFu
+static const palette_t PALETTES[] = {
+    {"GREEN", {RGB(0, 40, 12), RGB(0, 84, 30), RGB(16, 140, 54), RGB(56, 200, 92), RGB(120, 255, 146)}, PAL_STD},
+    {"AMBER", {RGB(60, 26, 0), RGB(110, 50, 0), RGB(170, 82, 0), RGB(225, 120, 8), RGB(255, 166, 40)}, PAL_STD},
+    {"CYAN", {RGB(0, 30, 50), RGB(0, 62, 96), RGB(16, 112, 160), RGB(56, 172, 222), RGB(140, 222, 255)}, PAL_STD},
+    {"RED", {RGB(52, 8, 8), RGB(100, 18, 14), RGB(170, 36, 26), RGB(226, 64, 48), RGB(255, 112, 92)}, PAL_STD},
+    {"MONO", {RGB(40, 40, 40), RGB(80, 80, 80), RGB(130, 130, 130), RGB(186, 186, 186), RGB(226, 226, 226)}, PAL_STD},
+    /* VIDEODROME: an early-80s cable channel on a tired set: the hot orange of a 1983 title card in five steps of
+     * phosphor, and the raster (every other line dimmed, vd_raster). Appended: SLOOP's palette numbers stay; the
+     * default of a fresh FM-1 (panel.c settings_init) */
+    {"CIVIC 83", {RGB(52, 14, 4), RGB(110, 34, 8), RGB(176, 64, 14), RGB(232, 100, 24), RGB(255, 150, 60)}, PAL_STD},
+    /* VIDEODROME 1.1: CH 83, public access after midnight. The dead-air blue of a community bulletin board behind
+     * character-generator type: white values, steel-blue labels, the chyron's yellow for what is touched (the cursor,
+     * the play head), secondary lines in a pale flesh tone. And under it the signal: on its raster the dark lines
+     * keep more of their red (cv_raster), so what is bright bleeds a little red. The default. */
+    {"CH 83", {RGB(26, 34, 84), RGB(50, 62, 128), RGB(124, 148, 206), RGB(236, 150, 128), RGB(240, 240, 232)},
+     RGB(6, 8, 40), RGB(255, 220, 40)},
+};
+#define PAL_CIVIC 5u
+#define PAL_CH83 6u
+#define NPALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
+static uint16_t pal[5];
+#define C_LINE pal[0]                /* 1 rules, separators */
+#define C_DIM pal[1]                 /* 2 inactive, empty steps, units */
+#define C_GRAY pal[2]                /* 3 labels */
+#define C_AMB pal[3]                 /* 4 secondary text */
+#define C_HI pal[4]                  /* 5 values, curves */
+
+/* SLOOP 2.7: your own theme, made in the web editor (its Theme page): the five steps of the screen and the four
+ * tracks' colours, with a name. MENU > COLOR shows it after MONO (theme_on: panel.c lights_word bit 30; the
+ * palette number stays a built-in one, the one an older SLOOP shows). Kept in the settings object's side record
+ * (project.c, storage.c st_side): an older SLOOP never reads it, and forgets it when it saves its settings. */
+#define THEME_MAGIC 0x324D4854u                  /* "THM2" (2.7 beta 2: with the accent) */
+#define THEME_MAGIC1 0x314D4854u                 /* "THM1": the first beta's, 36 bytes (its CRC where hi is now),
+                                                  * taken with a white accent (black on a light background) */
+typedef struct {
+    uint32_t magic;
+    char name[8];                                /* ASCII, 0-padded (not terminated when 8 long) */
+    uint16_t c[5];                               /* the screen, faintest .. strongest (as a palette), RGB565 */
+    uint16_t trk[4];                             /* the tracks' colours (knobs, tiles, meters), RGB565 */
+    uint16_t bg;                                 /* the background, RGB565 (0 black: as before) */
+    uint16_t hi;                                 /* the accent (what is touched, the cursor, the play head) */
+    uint16_t rsv;                                /* 0 */
+    uint32_t crc;                                /* CRC-32 (storage.c st_crc32) of the 36 bytes before it */
+} theme_t;
+_Static_assert(sizeof(theme_t) == 40u, "theme layout (the editor's Theme page writes these bytes)");
+static theme_t theme;                            /* the theme there is (theme_valid: project.c theme_check passed) */
+static uint8_t theme_valid, theme_on;
+/* the tracks' colours: full, two thirds, one third. VIDEODROME: the colour bars' (SMPTE: cyan, magenta, yellow) for
+ * the three synth tracks, the title card's orange for the drums */
+static const uint16_t TE_COL_DEF[4] = {RGB(0, 204, 224), RGB(224, 48, 200), RGB(232, 212, 0), RGB(255, 104, 24)};
+static const uint16_t TE_MID_DEF[4] = {RGB(0, 136, 150), RGB(150, 32, 134), RGB(154, 141, 0), RGB(170, 70, 16)};
+static const uint16_t TE_DIM_DEF[4] = {RGB(0, 68, 74), RGB(74, 16, 66), RGB(78, 70, 0), RGB(86, 34, 8)};
+static uint16_t TE_COL[4] = {RGB(0, 204, 224), RGB(224, 48, 200), RGB(232, 212, 0), RGB(255, 104, 24)};
+static uint16_t TE_MID[4] = {RGB(0, 136, 150), RGB(150, 32, 134), RGB(154, 141, 0), RGB(170, 70, 16)};
+static uint16_t TE_DIM[4] = {RGB(0, 68, 74), RGB(74, 16, 66), RGB(78, 70, 0), RGB(86, 34, 8)};
+static uint8_t vd_raster;                        /* VIDEODROME: the CRT raster on (CIVIC 83, CH 83; palette_set) */
+static uint8_t cv_ras;                           /* the canvas has its raster (once: a second blit must not dim it again) */
+static uint16_t rgb565_scale(uint32_t c, uint32_t num, uint32_t den)
+{
+    uint32_t r = ((c >> 11) & 31u) * num / den, g = ((c >> 5) & 63u) * num / den, b = (c & 31u) * num / den;
+    return (uint16_t)(r << 11 | g << 5 | b);
+}
+static uint32_t st_crc32(const void *p, uint32_t n);   /* storage.c (zlib CRC-32, as the editor's) */
+/* a channel of an RGB565 colour on 0..255 (as the editor reads it: x * 8, x * 4, x * 8) */
+static int32_t rgb565_ch(uint32_t c, uint32_t k)
+{
+    return k == 0u ? (int32_t)((c >> 11) & 31u) * 8 : k == 1u ? (int32_t)((c >> 5) & 63u) * 4 : (int32_t)(c & 31u) * 8;
+}
+/* one colour stands out from the background: one channel 96 or more apart */
+static int theme_apart(uint32_t c, uint32_t bg)
+{
+    uint32_t k;
+    for (k = 0; k < 3u; k++) {
+        int32_t d = rgb565_ch(c, k) - rgb565_ch(bg, k);
+        if (d >= 96 || d <= -96)
+            return 1;
+    }
+    return 0;
+}
+/* a theme as the editor sends it and flash keeps it: its magic, its CRC, a name of printable ASCII, and the strongest
+ * step and the accent standing out from the background (a screen whose values or menu cursor cannot be seen would hide
+ * the way back to COLOR). A first-beta THM1 (36 bytes) is turned into a THM2 in *t */
+static int theme_check(theme_t *t)
+{
+    uint32_t k;
+    if (t->magic == THEME_MAGIC1) {
+        if (((uint32_t)t->hi | (uint32_t)t->rsv << 16) != st_crc32(t, 32u))
+            return 0;
+        t->hi = theme_apart(0xFFFFu, t->bg) ? 0xFFFFu : 0u;
+        t->rsv = 0;
+        t->magic = THEME_MAGIC;
+        t->crc = st_crc32(t, __builtin_offsetof(theme_t, crc));
+    }
+    if (t->magic != THEME_MAGIC || t->crc != st_crc32(t, __builtin_offsetof(theme_t, crc)))
+        return 0;
+    for (k = 0; k < sizeof t->name; k++)
+        if (t->name[k] && (t->name[k] < 0x20 || t->name[k] > 0x7E))
+            return 0;
+    return theme_apart(t->c[4], t->bg) && theme_apart(t->hi, t->bg);
+}
+/* colour c at a / n over the background (antialiased text and icons) */
+static uint16_t rgb565_over(uint32_t c, uint32_t a, uint32_t n)
+{
+    uint32_t b = pal_bg, r, g, bl;
+    r = (((b >> 11) & 31u) * (n - a) + ((c >> 11) & 31u) * a) / n;
+    g = (((b >> 5) & 63u) * (n - a) + ((c >> 5) & 63u) * a) / n;
+    bl = ((b & 31u) * (n - a) + (c & 31u) * a) / n;
+    return (uint16_t)(r << 11 | g << 5 | bl);
+}
+static int theme_shown(void) { return theme_on && theme_valid; }
+/* (2.7) the greys of the TE-style pages (tiles, empty steps, labels, secondary text) are drawn for black: on a theme's
+ * background, each the same share of the way from it toward white (a dark one) or black (a light one). On black: as
+ * ever. te_gray() does it for any grey */
+static const uint16_t TE_G_DEF[4] = {RGB(26, 26, 30), RGB(54, 54, 60), RGB(118, 118, 126), RGB(196, 196, 204)};
+static uint16_t te_g[4] = {RGB(26, 26, 30), RGB(54, 54, 60), RGB(118, 118, 126), RGB(196, 196, 204)};
+#define TE_G1 te_g[0]                    /* tiles */
+#define TE_G2 te_g[1]                    /* empty steps, dial tracks */
+#define TE_G3 te_g[2]                    /* labels */
+#define TE_G4 te_g[3]                    /* secondary text */
+static uint16_t te_gray(uint32_t c)
+{
+    uint32_t bg = pal_bg, k, out = 0;
+    static const uint8_t SH[3] = {11, 5, 0}, MX[3] = {31, 63, 31};
+    int light;
+    if (!bg)
+        return (uint16_t)c;
+    light = ((bg >> 11) & 31u) * 2u * 299u + ((bg >> 5) & 63u) * 587u + (bg & 31u) * 2u * 114u > 31500u;
+    for (k = 0; k < 3u; k++) {
+        int32_t m = MX[k], b = (int32_t)((bg >> SH[k]) & (uint32_t)m), x = (int32_t)((c >> SH[k]) & (uint32_t)m);
+        out |= (uint32_t)(b + ((light ? 0 : m) - b) * x / m) << SH[k];
+    }
+    return (uint16_t)out;
+}
+
+static void palette_set(uint32_t i)              /* built-in palette i, or the theme when it is chosen (2.7) */
+{
+    uint32_t k;
+    int cu = theme_shown();
+    for (k = 0; k < 5u; k++)
+        pal[k] = cu ? theme.c[k] : PALETTES[i % NPALETTES].c[k];
+    pal_bg = cu ? theme.bg : PALETTES[i % NPALETTES].bg;
+    pal_hi = cu ? theme.hi : PALETTES[i % NPALETTES].hi;
+    vd_raster = cu ? 0u : i % NPALETTES == PAL_CH83 ? 2u : i % NPALETTES == PAL_CIVIC;   /* 2: with the signal's red */
+    for (k = 0; k < 4u; k++)
+        te_g[k] = te_gray(TE_G_DEF[k]);
+    for (k = 0; k < 4u; k++) {
+        TE_COL[k] = cu ? theme.trk[k] : TE_COL_DEF[k];
+        TE_MID[k] = cu ? rgb565_scale(theme.trk[k], 2u, 3u) : TE_MID_DEF[k];
+        TE_DIM[k] = cu ? rgb565_scale(theme.trk[k], 1u, 3u) : TE_DIM_DEF[k];
+    }
+}
+
+static inline uint16_t swap16(uint32_t c) { return (uint16_t)(((c >> 8) & 0xFFu) | ((c & 0xFFu) << 8)); }
+
+static void cv_begin(uint32_t w, uint32_t h, uint16_t bg)
+{
+    uint32_t i, n;
+    if (w * h > CV_MAX)
+        h = CV_MAX / w;
+    lcd_sync();                     /* the last blit may still read cv_px */
+    cv_w = w;
+    cv_h = h;
+    cv_ras = 0;
+    n = w * h;
+    for (i = 0; i < n; i++)
+        cv_px[i] = swap16(bg);
+}
+
+/* VIDEODROME: the raster. Every other line of the screen at three quarters (a CRT's dark between its scanlines),
+ * through everything drawn, text and all, as a set does it: rows r0.. of the canvas, blitted at screen row y */
+UI_SMALL static void cv_raster(uint32_t y, uint32_t r0)
+{
+    uint32_t r, x;
+    if (!vd_raster || cv_ras)
+        return;
+    cv_ras = 1;
+    for (r = r0 + ((y + r0 + 1u) & 1u); r < cv_h; r += 2u) {
+        uint16_t *p = &cv_px[r * cv_w];
+        if (vd_raster == 2u)                /* CH 83: red at 7/8, green and blue at 3/4 */
+            for (x = 0; x < cv_w; x++) {
+                uint32_t c = swap16(p[x]), r = (c >> 11) * 7u >> 3, gb = ((c >> 1) & 0x03EFu) + ((c >> 2) & 0x01E7u);
+                p[x] = swap16(r << 11 | gb);
+            }
+        else
+            for (x = 0; x < cv_w; x++) {
+                uint32_t c = swap16(p[x]);
+                p[x] = swap16(((c >> 1) & 0x7BEFu) + ((c >> 2) & 0x39E7u));
+            }
+    }
+}
+static void cv_blit(uint32_t x, uint32_t y)
+{
+    cv_raster(y, 0);
+    lcd_blit(x, y, cv_w, cv_h, cv_px);
+}
+
+/* canvas rows r0 .. cv_h-1 only, to screen row y + r0 */
+static void cv_blit_from(uint32_t x, uint32_t y, uint32_t r0)
+{
+    cv_raster(y, 0);
+    if (r0 < cv_h)
+        lcd_blit(x, y + r0, cv_w, cv_h - r0, cv_px + r0 * cv_w);
+}
+
+static inline void cv_pset(int32_t x, int32_t y, uint16_t c)
+{
+    y += cv_oy;
+    if ((uint32_t)x < cv_w && (uint32_t)y < cv_h)
+        cv_px[(uint32_t)y * cv_w + (uint32_t)x] = swap16(c);
+}
+
+/* VIDEODROME 1.1, after xtro's panel: every box has its four corner pixels knocked out (one chamfer, used everywhere,
+ * is most of what makes the screen read as one object). Boxes of 12 x 12 and more in a colour other than the
+ * background; off while a visualiser draws (its bars meet edge to edge: ui_vis.c) */
+static uint8_t cv_chamfer = 1;
+static void cv_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
+{
+    int32_t x0 = x, y0 = y, x1 = x + w, y1 = y + h + cv_oy, i;
+    uint16_t sc = swap16(c);
+    y += cv_oy;                             /* clipped once, then filled row by row */
+    if (x < 0)
+        x = 0;
+    if (y < 0)
+        y = 0;
+    if (x1 > (int32_t)cv_w)
+        x1 = (int32_t)cv_w;
+    if (y1 > (int32_t)cv_h)
+        y1 = (int32_t)cv_h;
+    for (; y < y1; y++)
+        for (i = x; i < x1; i++)
+            cv_px[(uint32_t)y * cv_w + (uint32_t)i] = sc;
+    if (cv_chamfer && w >= 12 && h >= 12 && c != pal_bg) {
+        cv_pset(x0, y0, pal_bg);
+        cv_pset(x0 + w - 1, y0, pal_bg);
+        cv_pset(x0, y0 + h - 1, pal_bg);
+        cv_pset(x0 + w - 1, y0 + h - 1, pal_bg);
+    }
+}
+
+/* 50 % of c on a screen with no grey to spare: a checkerboard (xtro's hatch), a few hundred pixels at most */
+UI_SMALL static void cv_hatch(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
+{
+    int32_t i, j;
+    for (j = 0; j < h; j++)
+        for (i = (x + y + j) & 1; i < w; i += 2)
+            cv_pset(x + i, y + j, c);
+}
+
+static void cv_line(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t c)
+{
+    int32_t dx = x1 > x0 ? x1 - x0 : x0 - x1, sx = x0 < x1 ? 1 : -1;
+    int32_t dy = y1 > y0 ? y0 - y1 : y1 - y0, sy = y0 < y1 ? 1 : -1;
+    int32_t err = dx + dy, guard = 2000;
+    while (guard--) {                       /* bounded: a line is never longer than 480 px */
+        int32_t e2 = 2 * err;               /* both tests use the same error value */
+        cv_pset(x0, y0, c);
+        if (x0 == x1 && y0 == y1)
+            break;
+        if (e2 >= dy) {
+            err += dy;
+            x0 += sx;
+        }
+        if (e2 <= dx) {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+/* glyph index of a character: the screen shows capitals only (SLOOP 2.6: bold capitals read better on the
+ * small screen), so lower case folds to upper case, Latin-1 too (\xfc -> \xdc; not the division sign, nor sharp
+ * s and y diaeresis, which have none); anything missing (and C1 controls) draws as '?' */
+static uint32_t glyph(const felucca_font_t *f, uint32_t ch)
+{
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 0xE0u && ch <= 0xFEu && ch != 0xF7u))
+        ch -= 32u;
+    if (ch < f->first || ch > f->last || (ch >= 127u && ch < 160u))
+        ch = '?';
+    return ch - f->first;
+}
+
+/* text, alpha-blended onto the background with colour c; returns the end x */
+static int32_t cv_text(int32_t x, int32_t y, const felucca_font_t *f, const char *s, uint16_t c)
+{
+    uint16_t ramp[16];
+    uint32_t a;
+    for (a = 0; a < 16u; a++)
+        ramp[a] = rgb565_over(c, a, 15u);              /* (on black: c * a / 15, as before) */
+    for (; *s; s++) {
+        uint32_t gi = glyph(f, (uint8_t)*s), gx, gy, w, bpr;
+        const uint8_t *gd;
+        w = f->bw[gi];
+        gd = f->data + f->off[gi];
+        if (f->bits == 1u) {                           /* on / off pixels: full colour where a bit is set */
+            uint32_t sw = w >> f->sh;
+            for (gy = 0; gy < f->h; gy++)
+                for (gx = 0; gx < w; gx++) {
+                    uint32_t i = (gy >> f->sh) * sw + (gx >> f->sh);
+                    if ((gd[i >> 3] >> (7u - (i & 7u))) & 1u)
+                        cv_pset(x - f->pad + (int32_t)gx, y + (int32_t)gy, ramp[15]);
+                }
+            x += f->adv[gi];
+            continue;
+        }
+        bpr = ((w >> f->sh) + 1u) / 2u;
+        for (gy = 0; gy < f->h; gy++)
+            for (gx = 0; gx < w; gx++) {
+                uint32_t sx = gx >> f->sh, v = gd[(gy >> f->sh) * bpr + sx / 2u];
+                v = (sx & 1u) ? (v & 15u) : (v >> 4);
+                if (v)
+                    cv_pset(x - f->pad + (int32_t)gx, y + (int32_t)gy, ramp[v]);
+            }
+        x += f->adv[gi];
+    }
+    return x;
+}
+
+static int32_t text_w(const felucca_font_t *f, const char *s)
+{
+    int32_t w = 0;
+    for (; *s; s++)
+        w += f->adv[glyph(f, (uint8_t)*s)];
+    return w;
+}
+
+/* the loud marker (xtro's banner), kept for what must not be missed (a message, a toast): a bar in the accent with
+ * hatched end caps and the text knocked out of it in the background's colour, centred between the caps */
+UI_SMALL static void cv_banner(int32_t x, int32_t y, int32_t w, int32_t h, const felucca_font_t *f, const char *s)
+{
+    int32_t cap = 8, tw = text_w(f, s), tx = x + (w - tw) / 2;
+    cv_rect(x, y, w, h, C_WHITE);
+    cv_hatch(x + 1, y + 1, cap, h - 2, C_BLACK);
+    cv_hatch(x + w - 1 - cap, y + 1, cap, h - 2, C_BLACK);
+    if (tx < x + cap + 2)
+        tx = x + cap + 2;
+    cv_text(tx, y + (h - (int32_t)f->h) / 2, f, s, C_BLACK);
+}
+
+/* a list's selected row (xtro's cursor): a chamfered outline round the row and a > prompt in it, a cursor, not a
+ * slab; y the row's text top (FONT_S), the outline from x0 to 238 */
+UI_SMALL static void cv_prompt_row(int32_t x0, int32_t y)
+{
+    int32_t w = 239 - x0;
+    cv_rect(x0 + 1, y - 1, w - 2, 1, C_DIM);
+    cv_rect(x0 + 1, y + 16, w - 2, 1, C_DIM);
+    cv_rect(x0, y, 1, 16, C_DIM);
+    cv_rect(x0 + w - 1, y, 1, 16, C_DIM);
+    cv_text(x0 + 3, y, &FONT_S, ">", C_WHITE);
+}
+
+/* one-shot: text in a box, cleared to black, blitted */
+static void draw_text_box(uint32_t x, uint32_t y, uint32_t w, const felucca_font_t *f, const char *s,
+                          uint16_t c, int align)
+{
+    int32_t tw = text_w(f, s), tx = 0;
+    cv_begin(w, f->h, C_BLACK);
+    if (align == 1)
+        tx = ((int32_t)w - tw) / 2;
+    else if (align == 2)
+        tx = (int32_t)w - tw;
+    cv_text(tx, 0, f, s, c);
+    cv_blit(x, y);
+    lcd_sync();                     /* one-shots (boot, crash, UBOOT, update) finish here */
+}

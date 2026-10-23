@@ -264,6 +264,8 @@ run "installer CLI (fm1_install.py) against a simulated FM-1" python3 tests/inst
 run "the Videodrome uploader (tools/videodrome_uploader.py) against a simulated keyboard" python3 tests/uploader_test.py
 run "VIDEODROME-UPLOADER.html is the one tools/make_uploader.py makes from releases/" sh -c \
     "python3 tools/make_uploader.py releases '$OUT/uploader.html' >/dev/null && cmp -s '$OUT/uploader.html' VIDEODROME-UPLOADER.html"
+run "the RP2350 build (rp2350/): its fw/ copy, the host test, the RP2350 compile when arduino-cli is there" \
+    sh rp2350/test/run.sh "$OUT/rp2350"
 run "the offline editor (one file, nothing next to it); the offline site (sw.js, manifest)" python3 tests/site_test.py
 
 if command -v node >/dev/null 2>&1; then

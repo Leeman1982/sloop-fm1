@@ -27,7 +27,9 @@ typedef struct {               /* proportional, see tools/gen_font.py */
 } felucca_font_t;
 #include "felucca_font.h"
 
+#ifndef CV_MAX                   /* (the RP2350 build, rp2350/Videodrome: an OLED, no canvas: its own, tiny) */
 #define CV_MAX (240u * 124u)      /* the graph strip is 240 x 124 */
+#endif
 static uint16_t cv_px[CV_MAX] __attribute__((section(".pool")));
 static uint32_t cv_w, cv_h;
 static int32_t cv_oy;            /* y offset for graph drawing */

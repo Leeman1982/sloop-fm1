@@ -9,6 +9,8 @@ early-80s cable channel: CRT phosphor and raster, colour bars, a test card. Song
 **To flash it:** double-click `VIDEODROME-UPLOADER.html` (Chrome or Edge), or `VIDEODROME-UPLOADER.bat` /
 `.command` / `videodrome-uploader.sh` — see [Install](VIDEODROME.md#install).
 
+**On an RP2350 (the xtro board: Pico 2, SSD1309 OLED, encoder + five buttons):** [rp2350/README.md](rp2350/README.md).
+
 **→ [VIDEODROME.md](VIDEODROME.md)**: the six models, their controls and sounds, the look, the chain builder, install,
 where it differs from the real instruments, what it cost. **Untested on hardware so far.**
 
