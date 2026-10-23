@@ -9,6 +9,13 @@ song mode, the punch-in effects, USB audio, MIDI), with the look of an early-80s
 > the editor, the installer). None of it has been played on an FM-1 or an SMK-37 yet. Make a backup first (the
 > editor's Projects → Backup; on an SMK-37 a full flash backup, see [SMK37.md](SMK37.md)), and report what you find.
 
+**1.1** is the UI overhaul. Its new default palette CH 83 is US public access after midnight. Every screen gets
+xtro's panel marks, the boot runs a transmission log, and the editor, installer and uploader share one skin (see
+[The look](#the-look)). The sound is 1.0's: the same engines, presets and golden renders. 1.0 stays on the branch
+`claude/videodrome-1.0`. To go back, choose its package in the uploader; your projects are kept. 1.0 has no
+palette CH 83, so its screen settings return to their defaults once. A settings backup made while CH 83 was chosen
+restores on 1.0 only after you pick another palette first.
+
 ---
 
 ## Contents
@@ -114,19 +121,39 @@ favourites from SLOOP still name the same sounds.
 ## The look
 
 Researched from the film (1983) and the cable television it is about: the title card arrives bright orange, *bent
-and distorted*, out of static; the station is CIVIC-TV, channel 83, cable 12, modelled on Toronto's CITY-TV; the
-screens are character-generator type, colour bars and a set's green channel digits.
+and distorted*, out of static; the station is CIVIC-TV, channel 83, modelled on Toronto's CITY-TV; the screens are
+character-generator type, colour bars and a set's green channel digits. **1.1** takes it to US public access at the
+start of the 80s, the hour after the community bulletin board, and gives it xtro's panel vocabulary (the "84" boot
+console of `leeman1982/xtro`'s `ui_gfx.h`), with something underneath that does not belong.
 
-- **CIVIC 83**, the default palette of a fresh unit (MENU → SCREEN → COLOR; SLOOP's five palettes and your own theme
-  are still there): five steps of phosphor in the title card's orange, and a **CRT raster** — every other line of
-  the screen dimmed, through text and all. The other palettes and your theme have no raster.
+- **CH 83**, the default palette from 1.1 (MENU → SCREEN → COLOR): the dead-air blue of a bulletin board behind
+  character-generator type. White values, steel-blue labels, secondary lines in a pale flesh tone, and the chyron's
+  yellow for what is touched (the cursor, the play head). Under it, the raster: every other line dimmed, but the dark
+  lines keep more of their red, so what is bright bleeds a little red. **CIVIC 83**, 1.0's orange phosphor, is still
+  there, and so are SLOOP's five palettes and your own theme (those have no raster).
+- **xtro's marks, on every screen** (`gfx.c`, `ui_draw.c`):
+  - every box has its corners knocked out, the one chamfer xtro uses everywhere;
+  - the header's rule is solid under the readout and decays to dots across the right half;
+  - the footer's rule is torn, and the columns are split by dotted rules;
+  - the page's name sits in the footer as a `[CHIP]`;
+  - a list's selected row is a `>` prompt in a chamfered outline, a cursor rather than a slab;
+  - messages ("SAVED", "FAV: ALREADY"…) are the loud marker: a bar in the accent with hatched caps and the text
+    knocked out of it.
+- **The boot**: the card (colour bars, the wordmark coming in bent with a red and a cyan ghost, CIVIC-TV, CHANNEL 83
+  PUBLIC ACCESS, LONG LIVE THE NEW FLESH), then xtro's console under it. It is a transmission log: the stage that just
+  finished (`CARRIER`, `ENGINES`, `SECOND CORE`, `AUDIO`, `USB`, `MIDI`, closed out `OK` or `SKIP`) and the one in
+  progress under a block cursor, over a framed bar that fills a step a stage, until `> SIGNAL ...... ACQUIRED` in red.
+  If the unit stops while starting, the screen names the stage it stopped in. The log adds about a quarter of a
+  second to the boot.
 - **The tracks** in the colour bars' cyan, magenta and yellow, the drums in the title's orange (also the SMK-37's pads).
-- **The boot screen**: colour bars, the wordmark coming in bent with a red and a cyan ghost (misconverged guns),
-  CIVIC-TV CHANNEL 83 CABLE 12, LONG LIVE THE NEW FLESH, VHS tracking streaks (`tools/gen_vd_splash.py`).
 - **TEST CARD**, the visualiser's 12th style (HOME on the TRACKS screen, SELECT): the bars torn sideways by the
   master's wave like a VCR losing its tracking, the tracks' bars flaring on their notes, PLEASE STAND BY, CH 83.
-- **The editor** in the same colours, the wordmark, *ch 83*, and the raster over the page (the **crt** switch under
-  the pages turns it off; the browser remembers).
+  About once every 45 seconds, for two seconds, the slate says something else.
+- **The editor, the installer and the uploader** wear the same skin (`web/vd_skin.css`, copied into each page by
+  `tools/vd_skin.py`, held to it by `tests/site_test.py`): dead-air blue, CG type with its drop edge, chamfered
+  frames, `>` prompts, `[PAGE]` chips, errors as the hatched banner. The station's bug sits in the corner with its
+  on-air light, and a faint red runs through the raster. The editor's **crt** switch turns the raster off. The Python
+  uploader's window is in the same colours.
 
 ## Songs: the chain builder
 
@@ -170,10 +197,10 @@ branch, `/docs`). The installer finds the device by its handshake and refuses a 
 
 | File | For |
 |---|---|
-| `videodrome-1.0-fm1.fwsc` | M-VAVE FM-1 |
-| `videodrome-1.0-smk37.fwsc` | M-Vave SMK-37 Pro |
-| `videodrome-1.0-smk37-elite.fwsc` | SMK-37 Elite (the same keyboard under its own model name) |
-| `videodrome-1.0-smk37-mke.fwsc` | MKE-P37 (likewise) |
+| `videodrome-1.1-fm1.fwsc` | M-VAVE FM-1 |
+| `videodrome-1.1-smk37.fwsc` | M-Vave SMK-37 Pro |
+| `videodrome-1.1-smk37-elite.fwsc` | SMK-37 Elite (the same keyboard under its own model name) |
+| `videodrome-1.1-smk37-mke.fwsc` | MKE-P37 (likewise) |
 
 Videodrome uses SLOOP's flash layout and package identity: going from SLOOP to Videodrome and back keeps your
 projects, presets, samples and settings. On the way back a track on one of the six models opens on a SLOOP engine

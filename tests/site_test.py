@@ -27,6 +27,11 @@ def check(what, ok):
 check("the editor links the offline file (download)", src.count('download="sloop-editor.html"') == 1)
 check("the installer page links it too",
       (ROOT / "web" / "index_pkg.html").read_text(encoding="utf-8").count('href="../editor/sloop-editor.html"') == 1)
+# VIDEODROME 1.1: the three pages wear the one CH 83 skin (web/vd_skin.css, tools/vd_skin.py)
+skin = (ROOT / "web" / "vd_skin.css").read_text(encoding="utf-8").rstrip()
+check("CH 83 skin: editor, installer and uploader carry web/vd_skin.css as it is",
+      all(f"/* VD-SKIN */\n{skin}\n  /* /VD-SKIN */" in (ROOT / "web" / n).read_text(encoding="utf-8")
+          for n in ("editor.html", "index_pkg.html", "uploader.html")))
 check("offline: the icon font inlined", 'url("fukiai.ttf")' not in off and "font/ttf;base64," in off)
 check("offline: no download link to itself", "<!--DL-->" not in off and 'id="offline"' not in off)
 check("offline: the installer and the font licence online",

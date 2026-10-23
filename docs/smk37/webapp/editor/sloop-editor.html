@@ -876,6 +876,65 @@
     .lvpad { height: 64px; }
     .lvfxpads { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
+  /* VD-SKIN */
+  /* ---- VIDEODROME 1.1: CH 83, the skin of the editor, the installer and the uploader (web/vd_skin.css; copied into
+     each page by tools/vd_skin.py, tests/site_test.py checks the copies). Public access after midnight: the dead-air
+     blue of a community bulletin board, character-generator type with its drop edge, the chyron's yellow; xtro's panel
+     vocabulary over it: chamfered frames, > prompts, [CHIP] names, hatched banners for what must not be missed. And
+     under it the signal: a faint red in the raster. The firmware's palette CH 83 (gfx.c) in the same colours. ---- */
+  :root {
+    --ch-bg: #06082a; --ch-s1: #0b1038; --ch-s2: #141c4e; --ch-s3: #2a3474; --ch-line: #1a2254;
+    --ch-dim: #7c94ce; --ch-fg2: #e6e6dc; --ch-fg: #f0f0e8; --ch-cg: #ffdc28; --ch-flesh: #ec9680; --ch-sig: #ff2c34;
+    --ch-edge: 2px 2px 0 rgba(0, 0, 0, .85);                      /* the character generator's drop edge */
+    --ch-chamfer: polygon(3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%,
+                          0 calc(100% - 3px), 0 3px);
+    /* the pages' own names for them: the editor's, the installer's, the uploader's */
+    --bg: var(--ch-bg); --s1: var(--ch-s1); --s2: var(--ch-s2); --s3: var(--ch-s3); --line: var(--ch-line);
+    --dim: var(--ch-dim); --fg2: var(--ch-fg2); --fg: var(--ch-fg); --tile: var(--ch-s1); --panel: var(--ch-s1);
+    --red: var(--ch-sig); --bad: var(--ch-sig); --osd: var(--ch-cg);
+  }
+  body { background: var(--bg); }
+  /* xtro: one chamfer on every box (not while a control has the keyboard: its focus ring stays whole) */
+  .card, .tile, .group, progress, .chainline, pre, .preview, select[size],
+  button:not(:focus-visible), select:not(:focus-visible) { clip-path: var(--ch-chamfer); }
+  .card, .tile, .group { border: 1px solid var(--ch-s3); }
+  /* character-generator type: the drop edge on what is set large */
+  h2, .lead, .tile b, #pagetitle, .sub { text-shadow: var(--ch-edge); }
+  .lead, button#go, #status, h1 { font-family: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; }
+  .lead { font-size: 17px; line-height: 1.45; }
+  button.pri:disabled, button#go:disabled { background: var(--ch-s1); color: var(--ch-s3); }
+  /* xtro's prompts and chips: a section's title after a > , the page's name in brackets */
+  .card > h2::before, .group > h2::before, main > h1::before { content: "> "; color: var(--ch-dim); text-shadow: none; }
+  .card > h2::first-letter { color: inherit; }
+  #pagetitle::before { content: "["; color: var(--ch-dim); margin-right: 2px; }
+  #pagetitle::after { content: "]"; color: var(--ch-dim); margin-left: 2px; }
+  .tabs button[aria-selected="true"]::before { content: "> "; color: var(--ch-cg); }
+  /* the chyron's yellow for what is pressed, chosen or ready; the flesh tone for the quiet second line */
+  ::selection { background: var(--ch-cg); color: #000; }
+  .seg button[aria-pressed="true"], button.tog[aria-pressed="true"] { background: var(--ch-cg); color: #000; }
+  .small, .dim, .tile span, footer { color: var(--ch-dim); }
+  .tile span, .brand span { color: var(--ch-flesh); }
+  /* the loud marker (xtro's banner): an error as a bar in the signal's red with hatched caps, the text knocked out */
+  #status.err, #status.bad, .vd-banner {
+    color: #000; background-color: var(--ch-sig); padding: 2px 18px; text-shadow: none; clip-path: var(--ch-chamfer);
+    background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, .9) 0 2px, transparent 2px 4px),
+                      repeating-linear-gradient(45deg, rgba(0, 0, 0, .9) 0 2px, transparent 2px 4px);
+    background-size: 10px 100%, 10px 100%; background-position: left top, right top; background-repeat: no-repeat; }
+  /* the station's bug in the corner, and its light: on the air */
+  html::after { content: "CH 83"; position: fixed; top: 10px; right: 14px; z-index: 2147483001; pointer-events: none;
+    font: 700 13px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 2px; color: rgba(240, 240, 232, .55);
+    padding: 3px 6px 3px 18px; border: 1px solid rgba(240, 240, 232, .3); text-shadow: var(--ch-edge);
+    background: radial-gradient(circle at 8px 50%, var(--ch-sig) 0 3px, transparent 4px); animation: ch-air 2.4s steps(1) infinite; }
+  @keyframes ch-air { 50% { background: none; } }
+  @media (prefers-reduced-motion: reduce) { html::after { animation: none; } }
+  /* the raster, and the signal under it: a faint red band now and then between the scanlines */
+  body.crt::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
+    background: repeating-linear-gradient(to bottom, transparent 0, transparent 2px, rgba(0, 0, 0, .24) 2px, rgba(0, 0, 0, .24) 3px),
+                repeating-linear-gradient(to bottom, transparent 0, transparent 46px, rgba(255, 24, 40, .035) 46px, rgba(255, 24, 40, .035) 49px),
+                radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 10, .45) 100%); }
+  @media print { body.crt::after, html::after { display: none; } }
+  /* ---- /VIDEODROME 1.1 ---- */
+  /* /VD-SKIN */
 </style>
 </head>
 <body>
@@ -4634,7 +4693,9 @@ const THEME = {
     ["CYAN", [[0, 30, 50], [0, 62, 96], [16, 112, 160], [56, 172, 222], [140, 222, 255]]],
     ["RED", [[52, 8, 8], [100, 18, 14], [170, 36, 26], [226, 64, 48], [255, 112, 92]]],
     ["MONO", [[40, 40, 40], [80, 80, 80], [130, 130, 130], [186, 186, 186], [226, 226, 226]]],
-    ["CIVIC 83", [[52, 14, 4], [110, 34, 8], [176, 64, 14], [232, 100, 24], [255, 150, 60]]]],   /* VIDEODROME (+ the raster) */
+    ["CIVIC 83", [[52, 14, 4], [110, 34, 8], [176, 64, 14], [232, 100, 24], [255, 150, 60]]],   /* VIDEODROME (+ the raster) */
+    /* VIDEODROME 1.1, the default: CH 83 (public access: dead-air blue, CG type, the chyron's yellow accent) */
+    ["CH 83", [[26, 34, 84], [50, 62, 128], [124, 148, 206], [236, 150, 128], [240, 240, 232]], [6, 8, 40], [255, 220, 40]]],
   TRACKS: [[0, 204, 224], [224, 48, 200], [232, 212, 0], [255, 104, 24]],   /* VIDEODROME: the colour bars' (gfx.c) */
   to565: ([r, g, b]) => ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3),
   from565: (v) => [Math.round((((v >> 11) & 31) * 255) / 31), Math.round((((v >> 5) & 63) * 255) / 63), Math.round(((v & 31) * 255) / 31)],
@@ -4704,7 +4765,8 @@ const THEME = {
     if (!m) return null;
     try { return THEME.decode(b64dec(m[1])); } catch (e) { return null; }
   },
-  builtin: (i) => ({ name: THEME.BUILTIN[i][0], c: THEME.BUILTIN[i][1].map((x) => x.slice()), trk: THEME.TRACKS.map((x) => x.slice()), bg: [0, 0, 0], hi: [255, 255, 255] }),
+  builtin: (i) => ({ name: THEME.BUILTIN[i][0], c: THEME.BUILTIN[i][1].map((x) => x.slice()), trk: THEME.TRACKS.map((x) => x.slice()),
+                     bg: (THEME.BUILTIN[i][2] || [0, 0, 0]).slice(), hi: (THEME.BUILTIN[i][3] || [255, 255, 255]).slice() }),
   /* five steps from one colour, as the FM-1's palettes go: dark to the colour, the last lighter toward white; on a light
      background (bg given) the other way: faint (light) to strong (dark) */
   ramp(rgb, bg) {

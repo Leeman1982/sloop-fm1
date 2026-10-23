@@ -1391,7 +1391,9 @@ async function editorTheme() {
   const C = E.CMD, T = E.THEME;
   const gfx = readFileSync(join(HERE, "../firmware/src/gfx.c"), "utf8");
   const rgb = (s) => [...s.matchAll(/RGB\((\d+), (\d+), (\d+)\)/g)].map((m) => [+m[1], +m[2], +m[3]]);
-  const pals = [...gfx.matchAll(/\{"([\w ]+)", \{(RGB[^}]*)\}\}/g)].map((m) => [m[1], rgb(m[2])]);
+  /* {"NAME", {five RGB}, PAL_STD} or (VIDEODROME 1.1) {"NAME", {five RGB}, background RGB, accent RGB} */
+  const pals = [...gfx.matchAll(/\{"([\w ]+)", \{(RGB[^}]*)\},\s*(PAL_STD|RGB\([^)]*\),\s*RGB\([^)]*\))\}/g)]
+    .map((m) => (m[3] === "PAL_STD" ? [m[1], rgb(m[2])] : [m[1], rgb(m[2]), ...rgb(m[3])]));
   const tdef = rgb((/TE_COL_DEF\[4\] = \{([^}]*)\}/.exec(gfx) || [])[1] || "");
   ok(js(pals) === js(T.BUILTIN) && js(tdef) === js(T.TRACKS), "theme: the built-in palettes and track colours == gfx.c (PALETTES, TE_COL_DEF)");
   ok(/#define THEME_MAGIC 0x324D4854u/.test(gfx) && /#define THEME_MAGIC1 0x314D4854u/.test(gfx)

@@ -70,8 +70,7 @@ UI_SMALL static void song_screen_draw(void)
     }
     cv_begin(240, 68, C_BLACK);
     if (ui.msg_t) {
-        cv_rect(0, 4, 240, 30, C_WHITE);
-        cv_text((240 - text_w(&FONT_S, ui.msg)) / 2, 11, &FONT_S, ui.msg, C_BLACK);
+        cv_banner(0, 4, 240, 30, &FONT_S, ui.msg);
     } else {
         static const char *const L[4] = {"entry", "section", "bars", "length"};
         for (i = 0; i < 4u; i++) {

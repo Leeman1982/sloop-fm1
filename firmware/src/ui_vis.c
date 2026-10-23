@@ -556,8 +556,8 @@ static void vis_wires(void)
 }
 /* VIDEODROME: the TEST CARD. CIVIC-TV's colour bars when the channel is off the air: the bars torn sideways a band at
  * a time by the master's wave (a VCR losing its tracking: louder, further), the four tracks' bars (cyan, magenta,
- * yellow, the drums' red) flaring white on a note, PLEASE STAND BY, and the channel in the corner in the set's green
- * on-screen digits */
+ * yellow, the drums' red) flaring white on a note, PLEASE STAND BY (now and then DO NOT ADJUST YOUR SET), and the
+ * channel in the corner in the set's green on-screen digits */
 static void vis_testcard(void)
 {
     /* the bars, 75 %: grey, yellow, cyan, green, magenta, red, blue; the track each one answers to (-1 none) */
@@ -587,8 +587,12 @@ static void vis_testcard(void)
     for (k = 0; k < 7u; k++)                        /* the castellations */
         if (CAST[k])
             cv_rect((int32_t)(k * 240u / 7u), 160, (k + 1u) * 240u / 7u - k * 240u / 7u, 16, CAST[k]);
-    cv_text(120 - text_w(&FONT_L, "STAND BY") / 2, 186, &FONT_L, "STAND BY", C_WHITE);
-    cv_text(120 - text_w(&FONT_S, "PLEASE") / 2, 182 - 14, &FONT_S, "PLEASE", RGB(180, 180, 180));
+    {   /* VIDEODROME 1.1: two seconds in every forty-five or so (the frames: ~30 a second) the slate is another one */
+        int odd = ui.frame % 1400u < 60u;
+        const char *top = odd ? "DO NOT ADJUST" : "PLEASE", *big = odd ? "YOUR SET" : "STAND BY";
+        cv_text(120 - text_w(&FONT_L, big) / 2, 186, &FONT_L, big, odd ? RGB(255, 44, 52) : C_WHITE);
+        cv_text(120 - text_w(&FONT_S, top) / 2, 182 - 14, &FONT_S, top, odd ? RGB(255, 44, 52) : RGB(180, 180, 180));
+    }
     cv_rect(176, 6, 58, 20, C_BLACK);               /* the set's channel display */
     cv_text(180, 8, &FONT_S, "CH 83", RGB(80, 255, 96));
     {   /* the master's level as the set's volume bar, under it all */
@@ -609,6 +613,7 @@ static void vis_draw(void)
         return;
     }
     vis_update();
+    cv_chamfer = 0;                                     /* (the bars meet edge to edge: no corners knocked out) */
     for (pass = 0; pass < 2u; pass++) {
         cv_begin(240, 120, C_BLACK);
         cv_oy = -(int32_t)(pass * 120u);
@@ -640,6 +645,7 @@ static void vis_draw(void)
         cv_oy = 0;
         cv_blit(0, pass * 120u);
     }
+    cv_chamfer = 1;
     if (vis_name_t)
         vis_name_t--;
 }

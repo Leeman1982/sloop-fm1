@@ -111,9 +111,8 @@ UI_SMALL static void te_dials(int32_t y0, const char *const lab[4], const char *
         return;
     *cache = sig;
     cv_begin(240, ui.msg_t ? 240u - (uint32_t)y0 : 40u, C_BLACK);
-    if (ui.msg_t) {                                     /* a message: a white bar */
-        cv_rect(0, 10, 240, 32, C_WHITE);
-        cv_text((240 - text_w(&FONT_S, ui.msg)) / 2, 18, &FONT_S, ui.msg, C_BLACK);
+    if (ui.msg_t) {                                     /* a message: the banner */
+        cv_banner(0, 10, 240, 32, &FONT_S, ui.msg);
         cv_blit(0, (uint32_t)y0);
         return;
     }

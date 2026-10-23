@@ -33,7 +33,7 @@ PAL = [
     (200, 20, 40),      # 11 the red ghost
     (0, 150, 170),      # 12 the cyan ghost
     (90, 90, 96),       # 13 static grey
-    (24, 24, 28),       # 14 the raster's dark line
+    (4, 6, 30),         # 14 the raster's dark line (the dead-air blue of CH 83, a shade under its background)
     (255, 200, 120),    # 15 the hot core of a letter
 ]
 
@@ -113,7 +113,7 @@ def picture():
                 if 0 <= xx < W:
                     img[y][xx] = 15 if (y - y0) % 6 == 2 else 9   # (a brighter line through the letters)
     # the channel ident, character-generator type
-    for s, y, sxx, col in (("CIVIC-TV", 110, 2, 1), ("CHANNEL 83   CABLE 12", 146, 1, 2),
+    for s, y, sxx, col in (("CIVIC-TV", 110, 2, 1), ("CHANNEL 83  PUBLIC ACCESS", 146, 1, 2),
                            ("LONG LIVE THE NEW FLESH", 164, 1, 13)):
         text(img, g, s, (W - text_w(g, s, sxx)) // 2, y, sxx, 2 if sxx == 2 else 1, col)
     # VHS tracking: a band of streaks at the bottom (horizontal runs: they compress, and it is what a bad tracking

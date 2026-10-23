@@ -308,11 +308,15 @@ UI_SMALL static void fm1_main(void)
         smk_trim_load(fm1_xip_ptr(SMK_TRIM_FLASH));
 #endif
     panel_init();
+    boot_log("CARRIER", "OK", "ENGINES");               /* (splash.c: the transmission log) */
     felucca_init();
+    boot_log("ENGINES", "OK", "SECOND CORE");
     cpu1_boot();                                        /* the second core: at power-on, before the audio and the
                                                          * timers (X0X: started later it never reaches its entry);
                                                          * if it does not answer, SLOOP runs on one core (cpu1.c) */
+    boot_log("SECOND CORE", cpu1_state == CPU1_OK ? "OK" : "SKIP", "AUDIO");
     audio_init();
+    boot_log("AUDIO", "OK", "USB");
 #if FELUCCA_CDC
     usb_cdc_on = usb_serial;                            /* menu USB SERIAL (persist_boot read it): before USB starts */
 #if defined(FELUCCA_CDC_ON) && FELUCCA_CDC_ON
@@ -323,6 +327,7 @@ UI_SMALL static void fm1_main(void)
     usb_rate_mode = usb_rate;                           /* menu USB RATE (2.7 beta), the same way */
 #endif
     usb_start();
+    boot_log("USB", "OK", "MIDI");
 #if FELUCCA_UART
     uart_midi_init();
 #endif
@@ -336,8 +341,12 @@ UI_SMALL static void fm1_main(void)
     if ((fm1_in.buttons & FM1_OCT_BOTH) == FM1_OCT_BOTH) {
         panel_setup();                        /* OCT- + OCT+ held at power-on */
         settings_save();
+        sloop_splash();                       /* (the card again, under the setup screen) */
     }
-    fm1_delay_ms(900);                                  /* (the logo stays a moment) */
+    boot_log("MIDI", "OK", "SIGNAL");
+    fm1_delay_ms(450);
+    boot_log("SIGNAL", "ACQUIRED", 0);                  /* on the air */
+    fm1_delay_ms(700);                                  /* (the logo stays a moment) */
     lcd_fill(0, 0, 240, 240, C_BLACK);
 
     healthy_since = fm1_ms;

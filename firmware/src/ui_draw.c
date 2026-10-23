@@ -50,8 +50,8 @@ UI_SMALL static void draw_head(void)
         return;
     ui.head_sig = sig;
     cv_begin(240, H_HEAD, C_BLACK);
-    if (ui.msg_t) {
-        cv_text(4, 1, &FONT_S, ui.msg, C_HI);
+    if (ui.msg_t) {                                   /* a message: the banner (gfx.c cv_banner) */
+        cv_banner(0, 1, 240, H_HEAD - 2, &FONT_S, ui.msg);
         cv_blit(0, Y_HEAD);
         return;
     }
@@ -105,8 +105,22 @@ UI_SMALL static void draw_head(void)
     }
     cv_blit(0, Y_HEAD);
 }
+/* a rule of on-pixel dashes every period (xtro's rules: 1 / 2 a dotted hairline, 2 / 3 torn film) */
+UI_SMALL static void lcd_rule(uint32_t x, uint32_t y, uint32_t w, uint32_t on, uint32_t period, uint16_t c)
+{
+    uint32_t i;
+    for (i = 0; i < w; i += period)
+        lcd_fill(x + i, y, w - i < on ? w - i : on, 1, c);
+}
+UI_SMALL static void lcd_vrule(uint32_t x, uint32_t y, uint32_t h, uint16_t c)   /* dotted, 1 / 2 */
+{
+    uint32_t j;
+    for (j = 0; j < h; j += 2u)
+        lcd_fill(x, y + j, 1, 1, c);
+}
 /* full redraw: the strips (head, columns, graph, foot) cover the rest, so only
- * the space between them is cleared, then the rules are drawn */
+ * the space between them is cleared, then the rules are drawn. VIDEODROME 1.1: xtro's: the header's rule solid under
+ * the readout, decaying to dots across the right half; the footer's torn; the columns' dotted */
 UI_SMALL static void draw_frame(void)
 {
     uint32_t i;
@@ -115,10 +129,11 @@ UI_SMALL static void draw_frame(void)
     lcd_fill(0, Y_GRAPH + H_GRAPH, 240, Y_FOOT - Y_GRAPH - H_GRAPH, C_BLACK);
     for (i = 0; i < 4u; i++)                            /* left inset of each column */
         lcd_fill(i * 60u, Y_LABEL, 4, Y_SEP_END - Y_LABEL, C_BLACK);
-    lcd_fill(0, H_HEAD, 240, 1, C_LINE);
-    lcd_fill(0, Y_FOOT - 2, 240, 1, C_LINE);
+    lcd_fill(0, H_HEAD, 120, 1, C_DIM);
+    lcd_rule(120, H_HEAD, 120, 1, 2, C_DIM);
+    lcd_rule(0, Y_FOOT - 2, 240, 2, 3, C_LINE);
     for (i = 1; i < 4u; i++)
-        lcd_fill(i * 60u - 1u, H_HEAD + 4, 1, Y_SEP_END - H_HEAD - 4, C_LINE);
+        lcd_vrule(i * 60u - 1u, H_HEAD + 4, Y_SEP_END - H_HEAD - 4, C_LINE);
 }
 
 /* one column: [icon] LABEL / value unit / gauge, redrawn only when it changed.
@@ -476,7 +491,7 @@ UI_SMALL static void graph_browse(void)
             str_cpy(nm, ENGINES[e]->presets[k].name, sizeof nm);
         }
         if (sel)
-            cv_rect(4, y + 6, 3, 3, C_WHITE);
+            cv_prompt_row(0, y);
         cv_text(14, y, &FONT_S, tag, sel ? C_GRAY : C_DIM);
         cv_text(54, y, &FONT_S, nm, sel ? C_WHITE : C_GRAY);
     }
@@ -497,7 +512,7 @@ UI_SMALL static void graph_user(void)
         else
             str_cpy(nm, "EMPTY", sizeof nm);
         if (sel)
-            cv_rect(4, y + 6, 3, 3, C_WHITE);
+            cv_prompt_row(0, y);
         cv_text(14, y, &FONT_S, tag, sel ? C_WHITE : C_GRAY);
         cv_text(54, y, &FONT_S, nm, used ? (sel ? C_WHITE : C_HI) : C_DIM);
     }
@@ -514,7 +529,7 @@ UI_SMALL static void graph_slots(void)
         b[0] = (char)('A' + i);
         b[1] = 0;
         if (sel)
-            cv_rect(4, y + 6, 3, 3, C_WHITE);
+            cv_prompt_row(0, y);
         cv_text(14, y, &FONT_S, b, sel ? C_WHITE : C_GRAY);
         cv_text(40, y, &FONT_S, project_used(i) ? "USED" : "EMPTY", project_used(i) ? (sel ? C_WHITE : C_HI) : C_DIM);
     }
@@ -903,13 +918,22 @@ UI_SMALL static void draw_foot(void)
     x = cv_text(x, 20, &FONT_S, en, C_HI);
     {
         char pf[16];
-        int32_t room = 236 - text_w(&FONT_S, ti) - 10 - (x + 10);
+        int32_t room = 236 - text_w(&FONT_S, ti) - 14 - (x + 10);
         str_cpy(pf, pn, sizeof pf);
         while (pf[0] && text_w(&FONT_S, pf) > room)
             pf[str_len(pf) - 1u] = 0;
         cv_text(x + 10, 20, &FONT_S, pf, C_AMB);
     }
-    cv_text(236 - text_w(&FONT_S, ti), 20, &FONT_S, ti, C_GRAY);
+    {   /* the page's name in terminal brackets (xtro's chip): quiet; the loud marker is the banner */
+        int32_t tw = text_w(&FONT_S, ti), cx = 237 - tw - 8;
+        cv_rect(cx, 19, 1, 17, C_DIM);
+        cv_rect(cx, 19, 3, 1, C_DIM);
+        cv_rect(cx, 35, 3, 1, C_DIM);
+        cv_rect(237, 19, 1, 17, C_DIM);
+        cv_rect(235, 19, 3, 1, C_DIM);
+        cv_rect(235, 35, 3, 1, C_DIM);
+        cv_text(cx + 4, 20, &FONT_S, ti, C_GRAY);
+    }
     cv_blit(0, Y_FOOT);
 }
 UI_SMALL static void draw_columns(void)

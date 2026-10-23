@@ -51,14 +51,45 @@ UI_SMALL static void sloop_logo_draw(uint32_t y0)
 }
 #endif
 
-/* the boot screen: the logo, the version, where it comes from */
+/* VIDEODROME 1.1: the transmission log under the card, after xtro's boot console. Two lines: the stage that just
+ * finished, closed out (OK, SKIP, or the signal ACQUIRED), and the one in progress under a block cursor; then a framed
+ * bar that fills a step a stage. Once on the air the second line is the version. done 0: nothing finished yet */
+#define BOOT_STAGES 7u
+static uint8_t boot_n;
+UI_SMALL static void boot_log(const char *done, const char *res, const char *next)
+{
+    int32_t x, rx, fill;
+    cv_begin(240, 50, C_BLACK);
+    if (done) {
+        boot_n++;
+        x = cv_text(4, 0, &FONT_S, "> ", C_DIM);
+        x = cv_text(x, 0, &FONT_S, done, C_GRAY);
+        rx = 236 - text_w(&FONT_S, res);
+        for (x += 6; x < rx - 6; x += 4)                    /* the leader: dots to the result */
+            cv_rect(x, 11, 1, 2, C_DIM);
+        cv_text(rx, 0, &FONT_S, res, next ? C_HI : RGB(255, 44, 52));
+    }
+    if (next) {
+        x = cv_text(4, 17, &FONT_S, "> ", C_DIM);
+        x = cv_text(x, 17, &FONT_S, next, C_HI);
+        cv_rect(x + 2, 18, 8, 14, C_WHITE);                 /* the block cursor */
+    } else {
+        cv_text(4, 17, &FONT_S, FELUCCA_VERSION, C_GRAY);
+    }
+    cv_rect(5, 40, 230, 1, C_DIM);                          /* the bar: a chamfered outline, a pixel clear, the fill */
+    cv_rect(5, 48, 230, 1, C_DIM);
+    cv_rect(4, 41, 1, 7, C_DIM);
+    cv_rect(235, 41, 1, 7, C_DIM);
+    fill = (int32_t)(boot_n >= BOOT_STAGES ? BOOT_STAGES : boot_n) * 228 / (int32_t)BOOT_STAGES;
+    cv_rect(6, 42, fill, 5, next ? C_WHITE : RGB(255, 44, 52));
+    cv_blit(0, 190);
+}
+
+/* the boot screen: CIVIC-TV's card, then the log (main.c fm1_main: a line a stage) */
 UI_SMALL static void sloop_splash(void)
 {
     lcd_fill(0, 0, 240, 240, C_BLACK);
-    sloop_logo_draw(10);
-    const char *v = FELUCCA_VERSION;
-    cv_begin(240, 36, C_BLACK);
-    cv_text(120 - text_w(&FONT_S, v) / 2, 0, &FONT_S, v, RGB(196, 196, 204));
-    cv_text(120 - text_w(&FONT_S, "on sloop + felucca") / 2, 18, &FONT_S, "on sloop + felucca", RGB(96, 96, 104));
-    cv_blit(0, 202);
+    sloop_logo_draw(0);
+    boot_n = 0;
+    boot_log(0, 0, "CARRIER");
 }

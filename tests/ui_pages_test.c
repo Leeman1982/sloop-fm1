@@ -184,12 +184,23 @@ int main(int argc, char **argv)
     }
     panel = PANEL_DEFAULT;
     layers_init();
-    settings.palette = 4;
-    palette_set(4);
+    settings.palette = getenv("UI_PALETTE") ? (uint8_t)(atoi(getenv("UI_PALETTE")) % NPALETTES) : 4u;   /* (renders for
+                                                                                  * review: UI_PALETTE=6 CH 83) */
+    palette_set(settings.palette);
     host_tracks_init();
     for (i = 0; i < NPART; i++) { set_engine_of(&trk[i], TRK_DEF[i][0]); apply_preset_to(&trk[i], TRK_DEF[i][1]); trk[i].engine = trk[i].eng_req; }
     TDRUM->p[P_E0] = DRUM_DEFAULT_KIT;
     sloop_splash(); ppm("page-splash");
+    {   /* VIDEODROME 1.1: the transmission log (splash.c boot_log, as main.c calls it), on the air */
+        static const char *const ST[] = {"CARRIER", "ENGINES", "SECOND CORE", "AUDIO", "USB", "MIDI", "SIGNAL"};
+        uint32_t k;
+        for (k = 0; k + 1u < sizeof ST / sizeof ST[0]; k++) boot_log(ST[k], k == 2u ? "SKIP" : "OK", ST[k + 1u]);
+        ppm("page-splash-log");
+        boot_log("SIGNAL", "ACQUIRED", 0);
+        ppm("page-splash-air");
+        printf("%-74s %s\n", "ui: boot log: seven stages, the bar full on the air", boot_n == BOOT_STAGES ? "ok" : "FAIL");
+        if (boot_n != BOOT_STAGES) fails++;
+    }
     ui.menu = 2; ui.force = 1; frame(); ppm("page-about"); ui.menu = 0;
     go_home(); ui.force = 1; frame(); ppm("page-tracks");
     open_family(FAM_ENV); ui.force = 1; ui.hot_col = 1; ui.hot_t = 30; frame(); ppm("page-env");

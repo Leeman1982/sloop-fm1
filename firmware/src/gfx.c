@@ -42,19 +42,28 @@ static uint16_t pal_hi = 0xFFFFu;        /* the accent: white unless a theme say
 typedef struct {
     const char *name;
     uint16_t c[5];
+    uint16_t bg, hi;                     /* VIDEODROME: the background and the accent (SLOOP's: black, white) */
 } palette_t;
+#define PAL_STD 0u, 0xFFFFu
 static const palette_t PALETTES[] = {
-    {"GREEN", {RGB(0, 40, 12), RGB(0, 84, 30), RGB(16, 140, 54), RGB(56, 200, 92), RGB(120, 255, 146)}},
-    {"AMBER", {RGB(60, 26, 0), RGB(110, 50, 0), RGB(170, 82, 0), RGB(225, 120, 8), RGB(255, 166, 40)}},
-    {"CYAN", {RGB(0, 30, 50), RGB(0, 62, 96), RGB(16, 112, 160), RGB(56, 172, 222), RGB(140, 222, 255)}},
-    {"RED", {RGB(52, 8, 8), RGB(100, 18, 14), RGB(170, 36, 26), RGB(226, 64, 48), RGB(255, 112, 92)}},
-    {"MONO", {RGB(40, 40, 40), RGB(80, 80, 80), RGB(130, 130, 130), RGB(186, 186, 186), RGB(226, 226, 226)}},
+    {"GREEN", {RGB(0, 40, 12), RGB(0, 84, 30), RGB(16, 140, 54), RGB(56, 200, 92), RGB(120, 255, 146)}, PAL_STD},
+    {"AMBER", {RGB(60, 26, 0), RGB(110, 50, 0), RGB(170, 82, 0), RGB(225, 120, 8), RGB(255, 166, 40)}, PAL_STD},
+    {"CYAN", {RGB(0, 30, 50), RGB(0, 62, 96), RGB(16, 112, 160), RGB(56, 172, 222), RGB(140, 222, 255)}, PAL_STD},
+    {"RED", {RGB(52, 8, 8), RGB(100, 18, 14), RGB(170, 36, 26), RGB(226, 64, 48), RGB(255, 112, 92)}, PAL_STD},
+    {"MONO", {RGB(40, 40, 40), RGB(80, 80, 80), RGB(130, 130, 130), RGB(186, 186, 186), RGB(226, 226, 226)}, PAL_STD},
     /* VIDEODROME: an early-80s cable channel on a tired set: the hot orange of a 1983 title card in five steps of
      * phosphor, and the raster (every other line dimmed, vd_raster). Appended: SLOOP's palette numbers stay; the
      * default of a fresh FM-1 (panel.c settings_init) */
-    {"CIVIC 83", {RGB(52, 14, 4), RGB(110, 34, 8), RGB(176, 64, 14), RGB(232, 100, 24), RGB(255, 150, 60)}},
+    {"CIVIC 83", {RGB(52, 14, 4), RGB(110, 34, 8), RGB(176, 64, 14), RGB(232, 100, 24), RGB(255, 150, 60)}, PAL_STD},
+    /* VIDEODROME 1.1: CH 83, public access after midnight. The dead-air blue of a community bulletin board behind
+     * character-generator type: white values, steel-blue labels, the chyron's yellow for what is touched (the cursor,
+     * the play head), secondary lines in a pale flesh tone. And under it the signal: on its raster the dark lines
+     * keep more of their red (cv_raster), so what is bright bleeds a little red. The default. */
+    {"CH 83", {RGB(26, 34, 84), RGB(50, 62, 128), RGB(124, 148, 206), RGB(236, 150, 128), RGB(240, 240, 232)},
+     RGB(6, 8, 40), RGB(255, 220, 40)},
 };
 #define PAL_CIVIC 5u
+#define PAL_CH83 6u
 #define NPALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
 static uint16_t pal[5];
 #define C_LINE pal[0]                /* 1 rules, separators */
@@ -91,7 +100,7 @@ static const uint16_t TE_DIM_DEF[4] = {RGB(0, 68, 74), RGB(74, 16, 66), RGB(78, 
 static uint16_t TE_COL[4] = {RGB(0, 204, 224), RGB(224, 48, 200), RGB(232, 212, 0), RGB(255, 104, 24)};
 static uint16_t TE_MID[4] = {RGB(0, 136, 150), RGB(150, 32, 134), RGB(154, 141, 0), RGB(170, 70, 16)};
 static uint16_t TE_DIM[4] = {RGB(0, 68, 74), RGB(74, 16, 66), RGB(78, 70, 0), RGB(86, 34, 8)};
-static uint8_t vd_raster;                        /* VIDEODROME: the CRT raster on (palette CIVIC 83; palette_set) */
+static uint8_t vd_raster;                        /* VIDEODROME: the CRT raster on (CIVIC 83, CH 83; palette_set) */
 static uint8_t cv_ras;                           /* the canvas has its raster (once: a second blit must not dim it again) */
 static uint16_t rgb565_scale(uint32_t c, uint32_t num, uint32_t den)
 {
@@ -176,9 +185,9 @@ static void palette_set(uint32_t i)              /* built-in palette i, or the t
     int cu = theme_shown();
     for (k = 0; k < 5u; k++)
         pal[k] = cu ? theme.c[k] : PALETTES[i % NPALETTES].c[k];
-    pal_bg = cu ? theme.bg : 0u;
-    pal_hi = cu ? theme.hi : 0xFFFFu;
-    vd_raster = !cu && i % NPALETTES == PAL_CIVIC;
+    pal_bg = cu ? theme.bg : PALETTES[i % NPALETTES].bg;
+    pal_hi = cu ? theme.hi : PALETTES[i % NPALETTES].hi;
+    vd_raster = cu ? 0u : i % NPALETTES == PAL_CH83 ? 2u : i % NPALETTES == PAL_CIVIC;   /* 2: with the signal's red */
     for (k = 0; k < 4u; k++)
         te_g[k] = te_gray(TE_G_DEF[k]);
     for (k = 0; k < 4u; k++) {
@@ -214,10 +223,16 @@ UI_SMALL static void cv_raster(uint32_t y, uint32_t r0)
     cv_ras = 1;
     for (r = r0 + ((y + r0 + 1u) & 1u); r < cv_h; r += 2u) {
         uint16_t *p = &cv_px[r * cv_w];
-        for (x = 0; x < cv_w; x++) {
-            uint32_t c = swap16(p[x]);
-            p[x] = swap16(((c >> 1) & 0x7BEFu) + ((c >> 2) & 0x39E7u));
-        }
+        if (vd_raster == 2u)                /* CH 83: red at 7/8, green and blue at 3/4 */
+            for (x = 0; x < cv_w; x++) {
+                uint32_t c = swap16(p[x]), r = (c >> 11) * 7u >> 3, gb = ((c >> 1) & 0x03EFu) + ((c >> 2) & 0x01E7u);
+                p[x] = swap16(r << 11 | gb);
+            }
+        else
+            for (x = 0; x < cv_w; x++) {
+                uint32_t c = swap16(p[x]);
+                p[x] = swap16(((c >> 1) & 0x7BEFu) + ((c >> 2) & 0x39E7u));
+            }
     }
 }
 static void cv_blit(uint32_t x, uint32_t y)
@@ -241,9 +256,13 @@ static inline void cv_pset(int32_t x, int32_t y, uint16_t c)
         cv_px[(uint32_t)y * cv_w + (uint32_t)x] = swap16(c);
 }
 
+/* VIDEODROME 1.1, after xtro's panel: every box has its four corner pixels knocked out (one chamfer, used everywhere,
+ * is most of what makes the screen read as one object). Boxes of 12 x 12 and more in a colour other than the
+ * background; off while a visualiser draws (its bars meet edge to edge: ui_vis.c) */
+static uint8_t cv_chamfer = 1;
 static void cv_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
 {
-    int32_t x1 = x + w, y1 = y + h + cv_oy, i;
+    int32_t x0 = x, y0 = y, x1 = x + w, y1 = y + h + cv_oy, i;
     uint16_t sc = swap16(c);
     y += cv_oy;                             /* clipped once, then filled row by row */
     if (x < 0)
@@ -257,6 +276,21 @@ static void cv_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
     for (; y < y1; y++)
         for (i = x; i < x1; i++)
             cv_px[(uint32_t)y * cv_w + (uint32_t)i] = sc;
+    if (cv_chamfer && w >= 12 && h >= 12 && c != pal_bg) {
+        cv_pset(x0, y0, pal_bg);
+        cv_pset(x0 + w - 1, y0, pal_bg);
+        cv_pset(x0, y0 + h - 1, pal_bg);
+        cv_pset(x0 + w - 1, y0 + h - 1, pal_bg);
+    }
+}
+
+/* 50 % of c on a screen with no grey to spare: a checkerboard (xtro's hatch), a few hundred pixels at most */
+UI_SMALL static void cv_hatch(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
+{
+    int32_t i, j;
+    for (j = 0; j < h; j++)
+        for (i = (x + y + j) & 1; i < w; i += 2)
+            cv_pset(x + i, y + j, c);
 }
 
 static void cv_line(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t c)
@@ -334,6 +368,31 @@ static int32_t text_w(const felucca_font_t *f, const char *s)
     for (; *s; s++)
         w += f->adv[glyph(f, (uint8_t)*s)];
     return w;
+}
+
+/* the loud marker (xtro's banner), kept for what must not be missed (a message, a toast): a bar in the accent with
+ * hatched end caps and the text knocked out of it in the background's colour, centred between the caps */
+UI_SMALL static void cv_banner(int32_t x, int32_t y, int32_t w, int32_t h, const felucca_font_t *f, const char *s)
+{
+    int32_t cap = 8, tw = text_w(f, s), tx = x + (w - tw) / 2;
+    cv_rect(x, y, w, h, C_WHITE);
+    cv_hatch(x + 1, y + 1, cap, h - 2, C_BLACK);
+    cv_hatch(x + w - 1 - cap, y + 1, cap, h - 2, C_BLACK);
+    if (tx < x + cap + 2)
+        tx = x + cap + 2;
+    cv_text(tx, y + (h - (int32_t)f->h) / 2, f, s, C_BLACK);
+}
+
+/* a list's selected row (xtro's cursor): a chamfered outline round the row and a > prompt in it, a cursor, not a
+ * slab; y the row's text top (FONT_S), the outline from x0 to 238 */
+UI_SMALL static void cv_prompt_row(int32_t x0, int32_t y)
+{
+    int32_t w = 239 - x0;
+    cv_rect(x0 + 1, y - 1, w - 2, 1, C_DIM);
+    cv_rect(x0 + 1, y + 16, w - 2, 1, C_DIM);
+    cv_rect(x0, y, 1, 16, C_DIM);
+    cv_rect(x0 + w - 1, y, 1, 16, C_DIM);
+    cv_text(x0 + 3, y, &FONT_S, ">", C_WHITE);
 }
 
 /* one-shot: text in a box, cleared to black, blitted */

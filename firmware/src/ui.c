@@ -3,7 +3,7 @@
 /* Felucca user interface. Four columns map to KNOB 1..4. Rendering is lazy:
  * every element remembers what it last drew and is redrawn only on change. */
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "VIDEODROME 2.8 V1"   /* VIDEODROME 1, on SLOOP 2.8 (based on Felucca). The editor reads the
+#define FELUCCA_VERSION "VIDEODROME 2.8 V1.1" /* VIDEODROME 1.1, on SLOOP 2.8 (based on Felucca). The editor reads the
                                                   * first number pair as the firmware: it must stay SLOOP's (2.8) */
 #endif
 static void project_save(uint32_t slot);

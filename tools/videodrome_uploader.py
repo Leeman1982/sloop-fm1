@@ -190,9 +190,10 @@ def run_gui(a, backend):
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
 
-    # CIVIC-TV: the firmware's CIVIC 83 palette and the editor's colours
-    BG, PANEL, ORANGE, GHOST_R, GHOST_C, OSD, FG, DIM = ("#000000", "#111114", "#ff6818", "#c81428", "#0096aa",
-                                                         "#50ff60", "#f2f2f2", "#8a8a92")
+    # CIVIC-TV, CH 83 (VIDEODROME 1.1): the firmware's CH 83 palette and the pages' skin (web/vd_skin.css): dead-air
+    # blue, CG white, the chyron's yellow; the wordmark in the title card's orange
+    BG, PANEL, ORANGE, GHOST_R, GHOST_C, OSD, FG, DIM = ("#06082a", "#0b1038", "#ff6818", "#c81428", "#0096aa",
+                                                         "#ffdc28", "#f0f0e8", "#7c94ce")
     BARS = ["#b4b4b4", "#bebe00", "#00bebe", "#00be00", "#be00be", "#be0000", "#0000be"]
     mono = ("Menlo", 11) if sys.platform == "darwin" else ("Consolas", 10) if sys.platform == "win32" else ("DejaVu Sans Mono", 10)
 
@@ -213,7 +214,7 @@ def run_gui(a, backend):
     head.pack(fill="x", padx=16, pady=(10, 0))
     for dx, col in ((-2, GHOST_R), (2, GHOST_C), (0, ORANGE)):   # the misconverged wordmark
         head.create_text(4 + dx, 30, text="VIDEODROME", anchor="w", fill=col, font=(mono[0], 30, "bold"))
-    head.create_text(10_000, 30, text="CH 83", anchor="e", fill=OSD, font=(mono[0], 14, "bold"), tags="osd")
+    head.create_text(10_000, 30, text="CH 83  PUBLIC ACCESS", anchor="e", fill=OSD, font=(mono[0], 14, "bold"), tags="osd")
     head.bind("<Configure>", lambda e: head.coords("osd", e.width - 4, 30))
     tk.Label(root, text="uploader for the M-VAVE FM-1 and SMK-37", bg=BG, fg=DIM, font=mono).pack(anchor="w", padx=20)
 
@@ -234,8 +235,8 @@ def run_gui(a, backend):
 
     def button(text, cmd, primary=False):
         b = tk.Button(btns, text=text, command=cmd, font=mono, relief="flat", padx=12, pady=6,
-                      bg=ORANGE if primary else "#26262c", fg="#000000" if primary else FG,
-                      activebackground=FG, activeforeground="#000000", disabledforeground="#55555c")
+                      bg=ORANGE if primary else "#141c4e", fg="#000000" if primary else FG,
+                      activebackground=FG, activeforeground="#000000", disabledforeground="#2a3474")
         b.pack(side="left", padx=(0, 8))
         return b
     b_find = button("Find keyboard", lambda: work(do_find))
@@ -273,7 +274,7 @@ def run_gui(a, backend):
         b_find.config(state="disabled" if busy else "normal")
         b_pick.config(state="disabled" if busy else "normal")
         ok = u.dev is not None and u.package is not None and backed.get() and not busy
-        b_go.config(state="normal" if ok else "disabled", bg=ORANGE if ok else "#3a2410")
+        b_go.config(state="normal" if ok else "disabled", bg=ORANGE if ok else "#0b1038")
 
     def work(fn, *args):
         """fn in a thread (USB waits must not freeze the window); its events come back through the queue"""
