@@ -1,0 +1,226 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- VIDEODROME uploader: one file, nothing to install. tools/make_uploader.py fills it with the update code
+     (web/fm1pkg.js, web/fm1ota.js: the browser installer's) and the packages of releases/, and writes
+     VIDEODROME-UPLOADER.html at the top of the repository. Double-click it: Chrome or Edge (Web MIDI). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VIDEODROME uploader</title>
+<style>
+  :root { --bg: #000; --panel: #111114; --line: #26262c; --fg: #f2f2f2; --dim: #8a8a92; --vd: #ff6818;
+          --vdr: #c81428; --vdc: #0096aa; --osd: #50ff60; --bad: #ff2c34;
+          --b1: #b4b4b4; --b2: #bebe00; --b3: #00bebe; --b4: #00be00; --b5: #be00be; --b6: #be0000; --b7: #0000be;
+          --font: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font); }
+  .bars { display: grid; grid-template-columns: repeat(7, 1fr); height: 14px; }
+  .bars i:nth-child(1) { background: var(--b1); } .bars i:nth-child(2) { background: var(--b2); }
+  .bars i:nth-child(3) { background: var(--b3); } .bars i:nth-child(4) { background: var(--b4); }
+  .bars i:nth-child(5) { background: var(--b5); } .bars i:nth-child(6) { background: var(--b6); }
+  .bars i:nth-child(7) { background: var(--b7); }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  h1 { margin: 0; font-size: 40px; line-height: 1.1; color: var(--vd); letter-spacing: 2px;
+       text-shadow: -2px 0 var(--vdr), 2px 0 var(--vdc); }
+  .osd { color: var(--osd); font-weight: 700; }
+  .sub { color: var(--dim); margin: 2px 0 16px; }
+  .card { background: var(--panel); padding: 12px 14px; margin: 0 0 12px; }
+  .row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; }
+  .row b { color: var(--dim); font-weight: 400; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+  button { font: inherit; color: var(--fg); background: var(--line); border: 0; padding: 8px 14px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #3a3a42; }
+  button.pri { background: var(--vd); color: #000; }
+  button:disabled { color: #55555c; background: #18181c; cursor: default; }
+  button.pri:disabled { background: #3a2410; }
+  label { cursor: pointer; }
+  progress { width: 100%; height: 10px; appearance: none; -webkit-appearance: none; border: 0; background: var(--panel); }
+  progress::-webkit-progress-bar { background: var(--panel); }
+  progress::-webkit-progress-value { background: var(--vd); }
+  progress::-moz-progress-bar { background: var(--vd); }
+  #status { color: var(--osd); min-height: 1.5em; margin: 6px 0 10px; }
+  #status.bad { color: var(--bad); }
+  #hint { color: var(--fg); }
+  pre { background: var(--panel); color: var(--dim); padding: 10px; margin: 0; max-height: 220px; overflow: auto;
+        white-space: pre-wrap; font: 12px/1.45 var(--font); }
+  details { color: var(--dim); }
+  .small { color: var(--dim); font-size: 13px; }
+  body::after { content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, transparent 0, transparent 2px, rgba(0, 0, 0, .2) 2px, rgba(0, 0, 0, .2) 3px); }
+</style>
+</head>
+<body>
+<div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<main>
+  <div class="top"><h1>VIDEODROME</h1><span class="osd">CH 83</span></div>
+  <p class="sub">uploader for the M-VAVE FM-1 and SMK-37 · <span id="version"></span></p>
+  <div class="card">
+    <div class="row"><b>keyboard</b><span id="dev">-</span></div>
+    <div class="row"><b>package</b><span id="pkg">-</span></div>
+  </div>
+  <div class="bar">
+    <button id="find">Find keyboard</button>
+    <button id="pick">Choose package…</button><input type="file" id="file" accept=".fwsc" hidden>
+    <button id="go" class="pri" disabled>Install</button>
+  </div>
+  <p class="bar"><label><input type="checkbox" id="backup"> I saved a backup (the editor: Projects &gt; Backup)</label></p>
+  <progress id="bar" max="100" value="0"></progress>
+  <p id="status">Plug the keyboard in by USB, switch it on, then Find keyboard.</p>
+  <p id="hint"></p>
+  <details><summary>log</summary><pre id="log"></pre></details>
+  <p class="small">Chrome or Edge (they speak Web MIDI; Firefox and Safari do not). The browser asks once for
+    permission to use MIDI devices: allow it. Close the editor and any other MIDI program first. An update cut off
+    (cable pulled, computer asleep) is not lost: the keyboard waits in its update mode, find it again and Install
+    finishes it. On an SMK-37 read SMK37.md first. GPL-3.0, no warranty.</p>
+</main>
+<script>
+/*LIB*/
+/* the packages of releases/ (tools/make_uploader.py): [{name, board, product, b64}] */
+const PACKAGES = /*PACKAGES*/;
+const VERSION = /*VERSION*/;
+const BOARD_OF_MODEL = { "FM-1": "fm1", "SMK-37 Pro": "smk37", "SMK-37 Elite": "smk37-elite", "MKE-P37": "smk37-mke" };
+const HINTS = {
+  notfound: "Plug the keyboard in with a USB data cable (not a charge-only one), switch it on, close the editor and every other MIDI program, then Find again.",
+  denied: "The browser was not allowed to use MIDI devices: allow it (the icon in the address bar), then Find again.",
+  nomidi: "This browser has no Web MIDI: open this file in Chrome or Edge.",
+  lost: "The USB connection was lost. Plug it back in and press Install again: the keyboard waits in its update mode until the write is finished.",
+  stopped: "The keyboard stopped answering. Press Install again; if it stops again, replug the cable first.",
+  noloader: "The update mode did not appear. Replug the USB cable and press Install again.",
+  noreturn: "Written, but the keyboard did not come back: switch it off and on.",
+  mismatch: "Written, but the keyboard reports another firmware. Switch it off and on, then Find to check.",
+  model: "This package is for another keyboard. Choose the one for this keyboard.",
+  fm1pkg: "This is the FM-1 package and the keyboard is an SMK-37: nothing was sent. Choose the SMK-37 package.",
+  board: "This package is laid out for another keyboard: nothing was written.",
+  foreign: "The keyboard is in another firmware's update mode: finish that update with its own updater (M-VAVE's M-UPGRADE).",
+  other: "The keyboard runs a firmware with its own updater: install from that firmware's updater.",
+  badpkg: "Not a VIDEODROME / SLOOP package, or a damaged one.",
+  nopkg: "There is no VIDEODROME package for this keyboard here. Choose one by hand only if you know it is right.",
+};
+const $ = (id) => document.getElementById(id);
+const log = (t) => { const p = $("log"); p.textContent += t + "\n"; p.scrollTop = p.scrollHeight; };
+const say = (t, bad = false, hint = "") => { $("status").textContent = t; $("status").classList.toggle("bad", bad); $("hint").textContent = hint; };
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const modelOf = (text) => text.split("_")[0].replace(/^ota-/i, "");
+const S = { midi: null, dev: null, chosen: null, byHand: false, writing: false };   /* dev: {text, model, ota, port} */
+
+/* the built-in packages, checked once: the identity in each matches its name */
+const BUILTIN = PACKAGES.map((p) => {
+  const raw = b64(p.b64);
+  return { name: p.name, board: p.board, product: productOf(raw), image: logicalImage(raw), ok: productOf(raw) === p.product };
+});
+window.VD = { BUILTIN, S };                           /* (the tests read them) */
+$("version").textContent = VERSION;
+
+function packageFor(model) { return BUILTIN.find((p) => p.ok && p.board === BOARD_OF_MODEL[model]) || null; }
+
+function refresh() {
+  const busy = S.writing;
+  $("find").disabled = busy;
+  $("pick").disabled = busy;
+  $("go").disabled = busy || !S.dev || !S.chosen || !$("backup").checked;
+  $("dev").textContent = S.dev ? `${S.dev.model}${S.dev.ota ? ", in update mode (Install finishes the update)" : ""}  (${S.dev.text})` : "-";
+  $("pkg").textContent = S.chosen ? `${S.chosen.name}  (${S.chosen.product})` : "-";
+}
+$("backup").addEventListener("change", refresh);
+
+function report(e) {
+  const code = (e && e.code) || "error";
+  say(`error: ${e && e.message ? e.message : e}`, true, HINTS[code] || "");
+  log(String(e && e.stack || e));
+}
+
+async function midi() {
+  if (S.midi) return S.midi;
+  if (!navigator.requestMIDIAccess) { const e = new Error("no Web MIDI in this browser"); e.code = "nomidi"; throw e; }
+  try { S.midi = await navigator.requestMIDIAccess({ sysex: true }); }
+  catch (x) { const e = new Error("MIDI permission refused"); e.code = "denied"; throw e; }
+  return S.midi;
+}
+
+/* the keyboard: its identity (running or in update mode), and its package unless one was chosen by hand */
+async function find() {
+  say("looking for the keyboard on the USB-MIDI ports…");
+  const up = new Updater(await midi(), log);
+  const d = await up.find(() => true, true);
+  if (!d) { const e = new Error("keyboard not found" + up.seen()); e.code = "notfound"; throw e; }
+  d.link.close();
+  S.dev = { text: d.id.text, model: modelOf(d.id.text), ota: /^ota-/i.test(d.id.model), port: d.name };
+  log(`found ${d.id.text} on ${d.name}`);
+  if (!S.byHand) S.chosen = packageFor(S.dev.model);
+  refresh();
+  if (!S.chosen) { const e = new Error(`no package for ${S.dev.model}`); e.code = "nopkg"; throw e; }
+  if (!sameKeyboard(S.dev.model, modelOf(S.chosen.product))) {
+    const e = new Error(`the keyboard is ${S.dev.model}, the package is for ${modelOf(S.chosen.product)}`); e.code = "model"; throw e;
+  }
+  say($("backup").checked ? "ready: press Install" : "ready: tick the backup box, then Install");
+}
+$("find").addEventListener("click", () => find().catch(report).finally(refresh));
+
+$("pick").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", async () => {
+  const f = $("file").files[0];
+  $("file").value = "";
+  if (!f) return;
+  try {
+    const raw = new Uint8Array(await f.arrayBuffer()), product = productOf(raw);
+    if (!/^(FM-1|SMK-37 Pro|SMK-37 Elite|MKE-P37)_9\d\d$/.test(product) || !hasOurLoader(logicalImage(raw))) {
+      const e = new Error(`${f.name}: not a VIDEODROME / SLOOP package (${product || "?"})`); e.code = "badpkg"; throw e;
+    }
+    S.chosen = { name: f.name, product, image: logicalImage(raw) };
+    S.byHand = true;
+    log(`chosen by hand: ${f.name} (${product})`);
+    if (S.dev && !sameKeyboard(S.dev.model, modelOf(product))) {
+      const e = new Error(`the keyboard is ${S.dev.model}, the package is for ${modelOf(product)}`); e.code = "model"; throw e;
+    }
+    say(S.dev ? "ready" : "package chosen: now Find keyboard");
+  } catch (e) { report(e); }
+  refresh();
+});
+
+const READS = 74 + 1179;                              /* step 1 and step 2's reads (as the browser installer counts them) */
+function step(k, a) {
+  log(`${k} ${a ?? ""}`);
+  if (k === "start") say("step 1 of 2: the keyboard checks the package…");
+  if (k === "verify") $("bar").value = Math.min(100, (a / READS) * 100);
+  if (k === "loader") say("the keyboard restarts into its update mode…");
+  if (k === "write") { say("step 2 of 2: writing — do not unplug"); $("bar").value = Math.min(100, ((74 + a) / READS) * 100); }
+  if (k === "reboot") say("written: the keyboard restarts…");
+  if (k === "done") $("bar").value = 100;
+}
+
+$("go").addEventListener("click", async () => {
+  if (S.writing || !S.dev || !S.chosen) return;
+  if (!confirm(`Write ${S.chosen.name} to the ${S.dev.model}?\n\nAbout two minutes. Do not unplug the USB cable or let the computer sleep until it says done.`)) return;
+  S.writing = true;
+  refresh();
+  $("bar").value = 0;
+  try {
+    const up = new Updater(await midi(), log);
+    const ota = await up.find((id) => /^ota-/i.test(id.model), true);
+    let got;
+    if (ota) {                                        /* an update cut off earlier: the write finished */
+      ota.link.close();
+      if (!(await up.resume(S.chosen.image, step, { package: S.chosen.product, anyModel: true }))) {
+        const e = new Error("the write stopped"); e.code = "stopped"; throw e;
+      }
+      got = S.chosen.product;
+    } else {
+      got = await up.install(S.chosen.image, S.chosen.product, step, true);
+    }
+    $("bar").value = 100;
+    say(`done: the keyboard runs ${got}. Long live the new flesh.`);
+    S.dev = null;                                     /* (Find again to see it: never a second write by accident) */
+  } catch (e) { report(e); }
+  S.writing = false;
+  refresh();
+});
+window.addEventListener("beforeunload", (e) => { if (S.writing) { e.preventDefault(); e.returnValue = "writing"; } });
+
+log(`packages: ${BUILTIN.map((p) => `${p.name} (${p.product}${p.ok ? "" : ", DAMAGED: not offered"})`).join(", ") || "none"}`);
+if (!navigator.requestMIDIAccess) say("This browser has no Web MIDI: open this file in Chrome or Edge.", true);
+refresh();
+</script>
+</body>
+</html>

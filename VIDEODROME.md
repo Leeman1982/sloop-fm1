@@ -145,6 +145,23 @@ Nothing changed on the device side: the same song order (`arranger.h`), so a son
 
 ## Install
 
+**The uploader** (in this folder, after a download of the repository): two ways, the same update protocol as the
+installer, the package for the keyboard picked by itself from its identity, Install held until you tick that you
+saved a backup, and an update cut off (cable pulled, computer asleep) finished by Find + Install.
+
+- `VIDEODROME-UPLOADER.html` — double-click it, it opens in the browser. **Chrome or Edge only** (Firefox and
+  Safari have no Web MIDI). Nothing to install, no internet: the four packages are inside it (3.3 MB). Made by
+  `python3 tools/make_uploader.py` from `releases/`.
+- `VIDEODROME-UPLOADER.bat` (Windows), `VIDEODROME-UPLOADER.command` (macOS), `sh videodrome-uploader.sh`
+  (Linux) — a window (`tools/videodrome_uploader.py`, Tk), `--cli` for the terminal, `--list`, `--package FILE`,
+  `--port NAME`. The first run makes `.uploader-venv` and installs `mido` + `python-rtmidi` from the internet.
+  python-rtmidi has ready-made builds only up to **Python 3.12**: the launchers look for 3.12 / 3.11 / 3.10 first;
+  with only 3.13+ the install needs a compiler (and on Linux `libasound2-dev`). When the setup fails they open
+  the HTML uploader instead.
+
+Tested against simulated keyboards only (`tests/uploader_test.py`, `tests/uploader_web_test.mjs`): not yet on a
+real FM-1 or SMK-37.
+
 **From the browser** (Chrome or Edge, desktop or Android): the site in `docs/` — `docs/webapp/installer/` for the
 FM-1, `docs/smk37/webapp/installer/` for the SMK-37 — on this fork's GitHub Pages once enabled (Settings → Pages →
 branch, `/docs`). The installer finds the device by its handshake and refuses a package for another board.

@@ -6,6 +6,9 @@ IR3109, the SEM state-variable, the KORG35 pair, the IG00156), on SLOOP 2.8's li
 early-80s cable channel: CRT phosphor and raster, colour bars, a test card. Songs chain from the editor in one line
 (`A4 B8 C8x2 D4`). Builds for the FM-1 and the SMK-37 (Pro, Elite, MKE-P37).
 
+**To flash it:** double-click `VIDEODROME-UPLOADER.html` (Chrome or Edge), or `VIDEODROME-UPLOADER.bat` /
+`.command` / `videodrome-uploader.sh` — see [Install](VIDEODROME.md#install).
+
 **→ [VIDEODROME.md](VIDEODROME.md)**: the six models, their controls and sounds, the look, the chain builder, install,
 where it differs from the real instruments, what it cost. **Untested on hardware so far.**
 

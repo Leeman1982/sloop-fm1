@@ -261,12 +261,17 @@ run "regression: target cost of the render loops" python3 tests/target_budget.py
 run "the render split over the two cores: every mode of the second core's host double (tests/cpu1_modes.sh)" sh tests/cpu1_modes.sh
 
 run "installer CLI (fm1_install.py) against a simulated FM-1" python3 tests/install_test.py
+run "the Videodrome uploader (tools/videodrome_uploader.py) against a simulated keyboard" python3 tests/uploader_test.py
+run "VIDEODROME-UPLOADER.html is the one tools/make_uploader.py makes from releases/" sh -c \
+    "python3 tools/make_uploader.py releases '$OUT/uploader.html' >/dev/null && cmp -s '$OUT/uploader.html' VIDEODROME-UPLOADER.html"
 run "the offline editor (one file, nothing next to it); the offline site (sw.js, manifest)" python3 tests/site_test.py
 
 if command -v node >/dev/null 2>&1; then
     run "web pages: editor protocol, samples, packages, update protocol" node web/test_web.mjs
     rm -rf "$OUT/pwa-site" && python3 web/make_site.py build/felucca.fwsc 2.7 "$OUT/pwa-site" >/dev/null &&
         run "the site without internet in Chromium (skipped without Playwright)" node tests/pwa_test.mjs "$OUT/pwa-site"
+    run "VIDEODROME-UPLOADER.html in Chromium on a simulated keyboard (skipped without Playwright)" \
+        node tests/uploader_web_test.mjs VIDEODROME-UPLOADER.html
 else
     echo "== skip web tests (no node)"
 fi
